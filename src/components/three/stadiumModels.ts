@@ -24,6 +24,7 @@ export interface StadiumAssembly {
   ballMesh: THREE.Mesh;
   ballShadow: THREE.Mesh;
   ballShadowMat: THREE.MeshBasicMaterial;
+  ledMat: THREE.MeshStandardMaterial;
   selectionRing: THREE.Mesh;
   players: TacticalPlayerNode[];
   hitboxes: THREE.Mesh[];
@@ -757,6 +758,7 @@ export function buildTacticalStadium(maxAnisotropy: number): StadiumAssembly {
     ballMesh,
     ballShadow,
     ballShadowMat,
+    ledMat,
     selectionRing,
     players,
     hitboxes,

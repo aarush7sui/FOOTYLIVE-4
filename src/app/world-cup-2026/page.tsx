@@ -22,10 +22,12 @@ import {
   Shield,
   Ticket,
   Volume2,
+  BarChart3,
 } from 'lucide-react';
 import { PageLoadCurtain } from '../../components/splash/PageLoadCurtain';
 import { ParticleBurstContainer } from '../../components/worldcup/ParticleBurst';
 import { TiltCard } from '../../components/worldcup/TiltCard';
+import { PredictWinnerModal } from '../../components/worldcup/PredictWinnerModal';
 import {
   ParallaxItem,
   ParallaxMouseLayer,
@@ -157,6 +159,7 @@ export default function WorldCup2026LandingPage() {
   const [selectedCountryFilter, setSelectedCountryFilter] = useState('ALL');
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const [ticketToast, setTicketToast] = useState<string | null>(null);
+  const [predictModalOpen, setPredictModalOpen] = useState(false);
 
   const filteredVenues = HOST_VENUES.filter((v) => {
     if (selectedCountryFilter === 'ALL') return true;
@@ -178,7 +181,7 @@ export default function WorldCup2026LandingPage() {
       {/* Particle Burst System on Click */}
       <ParticleBurstContainer />
 
-      {/* Daylight Faint Pitch Background Overlay with Pointer Depth Parallax */}
+      {/* Subtle Pitch Background Overlay with Pointer Depth Parallax */}
       <ParallaxMouseLayer depth={24} className="fixed inset-0 pointer-events-none z-0 opacity-45">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
           {/* Soccer center circle */}
@@ -200,7 +203,7 @@ export default function WorldCup2026LandingPage() {
         </button>
       </div>
 
-      {/* Top Daylight Stadium Header */}
+      {/* Top Stadium Header */}
       <header className="sticky top-0 z-30 w-full border-b border-blue-100 bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo & World Cup 2026 Tag */}
@@ -237,7 +240,16 @@ export default function WorldCup2026LandingPage() {
           </nav>
 
           {/* Action CTAs */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setPredictModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-[#FF3D00]/30 bg-[#FF3D00] px-3.5 py-2.5 text-xs font-bold text-white shadow-md shadow-orange-500/20 hover:bg-[#e63600] hover:scale-105 active:scale-95 transition-all"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Predict the Winner</span>
+              <span className="sm:hidden">Predict</span>
+            </button>
+
             <Link
               href="/"
               className="flex items-center gap-2 rounded-xl bg-[#0055FF] px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-600/25 hover:bg-[#0047db] hover:shadow-xl transition-all"
@@ -260,7 +272,7 @@ export default function WorldCup2026LandingPage() {
 
       {/* Main Single-Page Content */}
       <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-16 space-y-24">
-        {/* HERO SECTION ("Daylight Stadium Opener") */}
+        {/* HERO SECTION ("Tournament Stadium Opener") */}
         <section className="relative text-center space-y-8 pt-4">
           {/* Eyebrow Badge */}
           <motion.div
@@ -288,7 +300,7 @@ export default function WorldCup2026LandingPage() {
               </span>
             </h1>
             <p className="max-w-2xl mx-auto text-base sm:text-lg text-[#475467] font-medium leading-relaxed">
-              48 Nations. 16 World-Class Venues. 104 Historic Matches. Experience the largest sports spectacle in human history with daylight broadcast clarity and 4K multi-cam radar on FOOTYLive.
+              48 Nations. 16 World-Class Venues. 104 Historic Matches. Experience the largest sports spectacle in human history with crystal-clear 4K HDR broadcast quality and multi-cam radar on FOOTYLive.
             </p>
           </motion.div>
 
@@ -361,6 +373,14 @@ export default function WorldCup2026LandingPage() {
 
           {/* Quick CTA Buttons */}
           <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
+            <button
+              onClick={() => setPredictModalOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-[#FF3D00] px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-orange-600/30 hover:bg-[#e63600] hover:scale-105 active:scale-95 transition-all"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>Predict the Winner</span>
+            </button>
+
             <a
               href="#venues"
               className="flex items-center gap-2 rounded-xl bg-[#0055FF] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/30 hover:bg-[#0047db] hover:scale-105 active:scale-95 transition-all"
@@ -658,7 +678,7 @@ export default function WorldCup2026LandingPage() {
         </section>
         </ParallaxItem>
 
-        {/* SECTION 5: DAYLIGHT PASSES & TICKETING */}
+        {/* SECTION 5: STREAMING PASSES & TICKETING */}
         <ParallaxItem speed={-16}>
         <section id="tickets" className="space-y-6 pt-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
@@ -794,7 +814,7 @@ export default function WorldCup2026LandingPage() {
         </ParallaxItem>
       </main>
 
-      {/* Daylight Stadium Footer */}
+      {/* Tournament Stadium Footer */}
       <footer className="border-t border-blue-100 bg-white/80 py-10 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -811,6 +831,11 @@ export default function WorldCup2026LandingPage() {
           </div>
         </div>
       </footer>
+      {/* Predict the Winner Tournament Simulation Modal */}
+      <PredictWinnerModal
+        isOpen={predictModalOpen}
+        onClose={() => setPredictModalOpen(false)}
+      />
     </div>
   );
 }

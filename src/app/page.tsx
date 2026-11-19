@@ -17,6 +17,7 @@ import { TournamentDetailModal } from '../components/tournaments/TournamentDetai
 import { PageLoadCurtain } from '../components/splash/PageLoadCurtain';
 import { ParticleBurstContainer } from '../components/worldcup/ParticleBurst';
 import { WorldCupSection } from '../components/worldcup/WorldCupSection';
+import { TournamentHistoryD3 } from '../components/history/TournamentHistoryD3';
 import {
   ParallaxItem,
   ParallaxScrollProgress,
@@ -141,6 +142,9 @@ export default function FootyLiveApp() {
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (tabId === 'bracket') {
       const el = document.getElementById('bracket-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (tabId === 'history') {
+      const el = document.getElementById('tournament-history-section');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (tabId === 'highlights') {
       const el = document.getElementById('highlights-section');
@@ -325,6 +329,7 @@ export default function FootyLiveApp() {
           liveCount={liveCount}
           secondsUntilNextSync={secondsUntilNextSync}
           onOpenChat={() => setIsChatOpen(true)}
+          onOpenHistory={() => handleTabChange('history')}
         />
 
         {/* Network latency / error banner if live endpoints are unreachable */}
@@ -501,6 +506,11 @@ export default function FootyLiveApp() {
           {/* SINGLE-PAGE INTEGRATED "WORLD CUP 2026" COMPLETED TOURNAMENT SECTION WITH PARALLAX */}
           <ParallaxItem speed={28} scaleOnScroll>
             <WorldCupSection />
+          </ParallaxItem>
+
+          {/* D3 TOURNAMENT HISTORY: WINNERS & MILESTONES FROM INCEPTION */}
+          <ParallaxItem speed={20} scaleOnScroll>
+            <TournamentHistoryD3 />
           </ParallaxItem>
 
           {/* Option to look through all football tournaments in the world with Parallax */}

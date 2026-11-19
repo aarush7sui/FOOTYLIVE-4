@@ -33,6 +33,12 @@ interface RoundRecord {
   outcome: ShotOutcome | 'pending';
 }
 
+interface BannerInfo {
+  outcome: ShotOutcome;
+  headline: string;
+  detail: string;
+}
+
 // Module-scope scratch math objects (zero GC allocations inside render loop)
 const _camGoalPos = new THREE.Vector3();
 const _camLookTarget = new THREE.Vector3();
@@ -152,10 +158,14 @@ export const PenaltyArenaGame: React.FC = () => {
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>('striker');
   const [muted, setMuted] = useState(false);
   const [dockCollapsed, setDockCollapsed] = useState(false);
-  const [lastBanner, setLastBanner] = useState<string | null>(null);
+  const [lastBanner, setLastBanner] = useState<BannerInfo | null>(null);
   const [roundsHistory, setRoundsHistory] = useState<RoundRecord[]>(() =>
     Array.from({ length: 5 }, (_, i) => ({ round: i + 1, outcome: 'pending' }))
   );
+
+  // Commentary history ref ensures headlines never repeat back-to-back or cycle prematurely
+  const commentaryHistoryRef = useRef<Record<string, number[]>>({});
+  const lastHeadlineRef = useRef<string>('');
 
   // Mutable simulation state accessed inside rAF without re-creating renderer
   const simRef = useRef({
@@ -178,6 +188,8 @@ export const PenaltyArenaGame: React.FC = () => {
     resolveTimer: 0,
     hitstopTimer: 0,
     shakeIntensity: 0,
+    lastShotPower: 0.6,
+    lastShotCurve: 0 as -1 | 0 | 1,
 
     // Ball kinematics
     ballPos: new THREE.Vector3(0, BALL_RADIUS, PENALTY_SPOT_Z),
@@ -272,6 +284,8 @@ export const PenaltyArenaGame: React.FC = () => {
     s.isCharging = false;
     s.shotState = 'flying';
     s.shotEvaluated = false;
+    s.lastShotPower = power;
+    s.lastShotCurve = s.curveDir;
 
     // Flight speed scales 15.5..25.0 m/s (~0.44s..0.71s) so lateral curl is vivid
     const speed = 15.5 + power * 9.5;
@@ -753,8 +767,292 @@ export const PenaltyArenaGame: React.FC = () => {
     };
     window.addEventListener('resize', onResize);
 
+    // Non-repeating commentary selector (never repeats consecutively or until pool is exhausted)
+    const pickUniqueLine = (poolKey: string, candidates: string[]): string => {
+      const history = commentaryHistoryRef.current;
+      let used = history[poolKey] ?? [];
+      if (used.length >= candidates.length) {
+        used = [];
+      }
+      const availableIndices = candidates
+        .map((_, idx) => idx)
+        .filter(
+          (idx) => !used.includes(idx) && candidates[idx] !== lastHeadlineRef.current
+        );
+      const fallbackIndices =
+        availableIndices.length > 0
+          ? availableIndices
+          : candidates.map((_, idx) => idx).filter((idx) => candidates[idx] !== lastHeadlineRef.current);
+      const chosenIdx =
+        fallbackIndices[Math.floor(Math.random() * fallbackIndices.length)] ?? 0;
+
+      history[poolKey] = [...used, chosenIdx];
+      const chosen = candidates[chosenIdx];
+      lastHeadlineRef.current = chosen;
+      return chosen;
+    };
+
+    const buildGoalCommentary = (
+      crossX: number,
+      crossY: number,
+      power: number,
+      curve: -1 | 0 | 1,
+      keeperDive: number
+    ): { headline: string; detail: string } => {
+      const absX = Math.abs(crossX);
+      const sideLabel = crossX < 0 ? 'LEFT' : 'RIGHT';
+      const isPanenka =
+        absX < 1.35 && crossY >= 0.98 && power <= 0.48;
+      const isTopCorner = absX >= 2.05 && crossY >= 1.62;
+      const isBottomCorner = absX >= 2.05 && crossY <= 0.9;
+      const isRoofOfNet = absX < 2.05 && crossY >= 1.72;
+      const isSideNetting = absX >= 2.8 && crossY > 0.9 && crossY < 1.62;
+      const isCurler = curve !== 0;
+      const isRocket = power >= 0.8;
+
+      if (isPanenka) {
+        const keeperFooled = Math.abs(keeperDive) >= 0.25;
+        const pool = keeperFooled
+          ? [
+              'CHEEKY PANENKA! FLOATED RIGHT OVER THE DIVING KEEPER!',
+              'ICE IN THE VEINS! AUDACIOUS PANENKA LEAVES THE KEEPER STRANDED!',
+              'PURE FILTH! A DELICATE PANENKA CHIP RIGHT DOWN THE MIDDLE!',
+              'COOL AS ICE! THE KEEPER COMMITS AND THE PANENKA DRIFTS HOME!',
+              'OUTRAGEOUS COMPOSURE! DINKED PANENKA INTO THE HEART OF GOAL!',
+            ]
+          : [
+              'VELVET TOUCH! LOFTED PANENKA FINDS THE BACK OF THE NET!',
+              'DARING CHIP! FEATHERED RIGHT DOWN THE MIDDLE FOR A GOAL!',
+              'SILKY PANENKA! FLOATED EFFORTLESSLY BEYOND REACH!',
+              'SHOWTIME PENALTY! CHEEKY CHIPPED FINISH FROM TWELVE YARDS!',
+            ];
+        return {
+          headline: pickUniqueLine('goal-panenka', pool),
+          detail: keeperFooled ? 'GOAL · PANENKA CHIP · KEEPER FOOLED' : 'GOAL · PANENKA CHIP · CENTER',
+        };
+      }
+
+      if (isTopCorner) {
+        const pool = isCurler
+          ? [
+              `TOP-${sideLabel} CORNER! WHIPPED CURLER NESTLES IN THE BINS!`,
+              `POSTAGE STAMP! SWERVING INTO THE TOP-${sideLabel} STANCHION!`,
+              `WHERE THE SPIDERS LIVE! BENT RIGHT INTO THE TOP-${sideLabel} CORNER!`,
+              `PURE ARTISTRY! CURLED UNSTOPPABLY INTO THE UPPER NINETY!`,
+              `MAGIC WAND OF A BOOT! TOP-${sideLabel} BINS WITH WICKED BEND!`,
+            ]
+          : isRocket
+          ? [
+              `THUNDERBOLT INTO THE TOP-${sideLabel} CORNER! NO KEEPER SAVES THAT!`,
+              `UNSTOPPABLE ROCKET! RIFLED INTO THE TOP-${sideLabel} BINS!`,
+              `PICK THAT ONE OUT! SCREAMER STRAIGHT INTO THE TOP-${sideLabel} CORNER!`,
+              `ABSOLUTE SCORCHER! SMASHED INTO THE UPPER NINETY!`,
+              `BLISTERING STRIKE! TUCKED UNDER THE TOP-${sideLabel} ANGLE!`,
+            ]
+          : [
+              `GOAL! PINPOINT FINISH INTO THE TOP-${sideLabel} CORNER!`,
+              `TOP BINS! PLACED RIGHT INTO THE TOP-${sideLabel} STANCHION!`,
+              `CLINICAL ACCURACY! KISSES THE TOP-${sideLabel} CORNER ON THE WAY IN!`,
+              `TEXTBOOK PENALTY! GUIDED INTO THE TOP-${sideLabel} CORNER!`,
+              `UPPER NINETY! NO CHANCE FOR THE KEEPER IN THE TOP-${sideLabel}!`,
+            ];
+        const styleTag = isCurler ? 'WHIPPED CURLER' : isRocket ? 'POWER ROCKET' : 'PINPOINT STRIKE';
+        return {
+          headline: pickUniqueLine(`goal-top-${sideLabel}`, pool),
+          detail: `GOAL · TOP-${sideLabel} CORNER · ${styleTag}`,
+        };
+      }
+
+      if (isBottomCorner) {
+        const pool = isCurler
+          ? [
+              `BENT INTO THE BOTTOM-${sideLabel} CORNER! KEEPER ROOTED!`,
+              `SWERVING DAISY CUTTER! CURLS INSIDE THE BOTTOM-${sideLabel} POST!`,
+              `WICKED LOW CURL! SNUCK INTO THE BOTTOM-${sideLabel} CORNER!`,
+              `WHIPPED LOW AND HARD! THREADED INTO THE BOTTOM-${sideLabel} NETTING!`,
+            ]
+          : [
+              `DAISY CUTTER! DRILLED RIGHT INTO THE BOTTOM-${sideLabel} CORNER!`,
+              `INCH-PERFECT! SLIPPED INSIDE THE BOTTOM-${sideLabel} UPRIGHT!`,
+              `LOW AND LETHAL! TUCKED INTO THE BOTTOM-${sideLabel} CORNER!`,
+              `PRECISION STRIKE! BURIED IN THE BOTTOM-${sideLabel} SIDE NETTING!`,
+              `CAN'T PLACE IT BETTER! SKIMS THE TURF INTO THE BOTTOM-${sideLabel}!`,
+            ];
+        return {
+          headline: pickUniqueLine(`goal-bottom-${sideLabel}`, pool),
+          detail: `GOAL · BOTTOM-${sideLabel} CORNER${isCurler ? ' · CURLER' : ''}`,
+        };
+      }
+
+      if (isRoofOfNet) {
+        const pool = [
+          'SMASHED INTO THE ROOF OF THE NET! FEROCIOUS STRIKE!',
+          'THUNDERBOLT TO THE TOP SHELF! KEEPER LEFT HELPLESS!',
+          'HAMMERED HIGH UNDER THE CROSSBAR! UNBELIEVABLE POWER!',
+          'LIFTED INTO THE ROOF OF GOAL! RUTHLESS FINISHING!',
+          'ROCKETED PAST THE GLOVES AND INTO THE TOP SHELF!',
+        ];
+        return {
+          headline: pickUniqueLine('goal-roof', pool),
+          detail: `GOAL · ROOF OF THE NET${isRocket ? ' · THUNDERBOLT' : ''}`,
+        };
+      }
+
+      if (isSideNetting) {
+        const pool = [
+          `SIDE NETTING! FIRED PAST THE GLOVES ON THE ${sideLabel}!`,
+          `HUGS THE INSIDE OF THE ${sideLabel} POST! CLINICAL GOAL!`,
+          `THREADED THE NEEDLE! KISSES THE ${sideLabel} SIDE NET!`,
+          `CLINICAL PLACEMENT! BURIED DEEP INSIDE THE ${sideLabel} UPRIGHT!`,
+        ];
+        return {
+          headline: pickUniqueLine(`goal-side-${sideLabel}`, pool),
+          detail: `GOAL · ${sideLabel} SIDE NETTING${isCurler ? ' · CURLER' : ''}`,
+        };
+      }
+
+      if (isCurler) {
+        const pool = [
+          'BENT LIKE MAGIC! SWERVING CURLER BEATS THE KEEPER!',
+          'WICKED WHIP! BENDS AROUND THE REACH AND INTO THE NET!',
+          'MAGNUS SPECIAL! AUDACIOUS CURLER FINDS THE BACK OF THE NET!',
+          'CURLED HOME WITH STYLE! DELICATE SWERVE OFF THE BOOT!',
+        ];
+        return {
+          headline: pickUniqueLine('goal-curler', pool),
+          detail: `GOAL · ${curve < 0 ? 'LEFT' : 'RIGHT'} CURLER`,
+        };
+      }
+
+      if (isRocket) {
+        const pool = [
+          'NET RIPPLER! THUNDEROUS PENALTY BLASTS PAST THE KEEPER!',
+          'PURE VENOM! HIT LIKE A CANNONBALL FROM TWELVE YARDS!',
+          'LASER STRIKE! ZERO HESITATION, MAXIMUM POWER!',
+          'UNHOLDABLE PACE! SCORCHED STRAIGHT INTO THE BACK OF THE NET!',
+        ];
+        return {
+          headline: pickUniqueLine('goal-rocket', pool),
+          detail: 'GOAL · POWER STRIKE',
+        };
+      }
+
+      const pool = [
+        'COOL AS YOU LIKE! SLOTTED HOME WITH COMPOSURE!',
+        'SENT THE KEEPER THE WRONG WAY! ICE-COOL FINISH!',
+        'CLINICAL EXECUTION! BURIED CALMLY INTO THE NET!',
+        'NO MISTAKE FROM THE SPOT! STRIKER MAKES IT COUNT!',
+        'CRISP FINISH! STRAIGHT PAST THE OUTSTRETCHED KEEPER!',
+      ];
+      return {
+        headline: pickUniqueLine('goal-clinical', pool),
+        detail: 'GOAL · CLINICAL FINISH',
+      };
+    };
+
+    const buildSaveCommentary = (
+      hitPart: 'glove' | 'body' | 'boot',
+      keeperDive: number
+    ): { headline: string; detail: string } => {
+      const diving = Math.abs(keeperDive) > 0.35;
+      if (hitPart === 'glove' && diving) {
+        const pool = [
+          'FINGERTIP SAVE! KEEPER FLIES ACROSS GOAL TO TIP IT AWAY!',
+          'WORLD-CLASS PARRY! STUNNING FULL-STRETCH GLOVE STOP!',
+          'WHAT A REFLEX SAVE! PAWED CLEAR AT FULL EXTENSION!',
+          'HEROIC BETWEEN THE STICKS! STRONG WRIST DENIES THE GOAL!',
+          'TOP-DRAWER KEEPING! GETS A FIRM GLOVE TO IT IN MID-AIR!',
+        ];
+        return {
+          headline: pickUniqueLine('save-diving-glove', pool),
+          detail: 'SAVED · FULL-STRETCH GLOVE STOP',
+        };
+      }
+      if (hitPart === 'boot') {
+        const pool = [
+          'KICKED AWAY! BIG BOOT BLOCK DENIES THE PENALTY!',
+          'INSTINCTIVE FOOT SAVE! KEEPER STICKS OUT A LEG JUST IN TIME!',
+          'BRILLIANT LOW STOP! DEFLECTED CLEAR OFF THE KEEPER’S BOOTS!',
+          'DENIED BY THE LEGS! REFLEX REACTION FROM THE GOALKEEPER!',
+        ];
+        return {
+          headline: pickUniqueLine('save-boot', pool),
+          detail: 'SAVED · REFLEX BOOT BLOCK',
+        };
+      }
+      const pool = [
+        'STONE WALL! KEEPER GUESSES RIGHT AND SMOTHERS THE STRIKE!',
+        'READ LIKE AN OPEN BOOK! KEEPER STANDS TALL TO PARRY IT!',
+        'DENIED AT THE LINE! STRONG BODY BLOCK KEEPS IT OUT!',
+        'STOOD HIS GROUND! KEEPER ANTICIPATES THE SPOT KICK!',
+        'NO WAY THROUGH! COMMANDING STOP BY THE SHOT-STOPPER!',
+      ];
+      return {
+        headline: pickUniqueLine('save-body', pool),
+        detail: diving ? 'SAVED · DIVING BLOCK' : 'SAVED · KEEPER STANDS TALL',
+      };
+    };
+
+    const buildPostCommentary = (
+      hitCrossbar: boolean,
+      crossX: number
+    ): { headline: string; detail: string } => {
+      if (hitCrossbar) {
+        const pool = [
+          'CLANG! THUNDERS STRAIGHT OFF THE CROSSBAR!',
+          'RATTLES THE BAR! INCHES AWAY FROM THE TOP CORNER!',
+          'CRACKS THE WOODWORK! THE CROSSBAR IS STILL VIBRATING!',
+          'SO CLOSE! SKIMS THE UNDERSIDE OF THE BAR AND BOUNCES CLEAR!',
+        ];
+        return {
+          headline: pickUniqueLine('post-crossbar', pool),
+          detail: 'WOODWORK · OFF THE CROSSBAR',
+        };
+      }
+      const sideLabel = crossX < 0 ? 'LEFT' : 'RIGHT';
+      const pool = [
+        `AGONIZINGLY OFF THE ${sideLabel} POST! BEATEN THE KEEPER, DENIED BY IRON!`,
+        `CLATTERS THE ${sideLabel} UPRIGHT! HEARTBREAK FROM TWELVE YARDS!`,
+        `SHAVES THE ${sideLabel} POST AND RICOCHETS BACK OUT!`,
+        `DENIED BY THE WOODWORK! REBOUNDS HARSHLY OFF THE ${sideLabel} UPRIGHT!`,
+      ];
+      return {
+        headline: pickUniqueLine(`post-upright-${sideLabel}`, pool),
+        detail: `WOODWORK · ${sideLabel} UPRIGHT`,
+      };
+    };
+
+    const buildWideCommentary = (
+      crossX: number,
+      crossY: number
+    ): { headline: string; detail: string } => {
+      if (crossY >= GOAL_HEIGHT - 0.08) {
+        const pool = [
+          'BLAZED OVER THE CROSSBAR! TOO MUCH POWER ON THAT STRIKE!',
+          'ROW Z! SAILS HIGH ABOVE THE GOALFRAME!',
+          'SKIED IT! LEANED BACK AND SENT IT INTO THE UPPER TIER!',
+          'TOO MUCH ELEVATION! CLEARS THE BAR WITH ROOM TO SPARE!',
+        ];
+        return {
+          headline: pickUniqueLine('wide-over', pool),
+          detail: 'MISSED · OVER THE CROSSBAR',
+        };
+      }
+      const sideLabel = crossX < 0 ? 'LEFT' : 'RIGHT';
+      const pool = [
+        `DRAGGED WIDE OF THE ${sideLabel} POST! SHOULD HAVE HIT THE TARGET!`,
+        `WHIPS IT PAST THE ${sideLabel} UPRIGHT! MISSED THE FRAME!`,
+        `PULLED WIDE TO THE ${sideLabel}! KEEPER WATCHES IT SAIL BY!`,
+        `OFF TARGET ON THE ${sideLabel}! NEVER QUITE BENT BACK IN TIME!`,
+      ];
+      return {
+        headline: pickUniqueLine(`wide-${sideLabel}`, pool),
+        detail: `MISSED · WIDE ${sideLabel}`,
+      };
+    };
+
     // Outcome Resolution Helper
-    const recordOutcome = (outcome: ShotOutcome, banner: string) => {
+    const recordOutcome = (outcome: ShotOutcome, banner: BannerInfo) => {
       const s = simRef.current;
       s.shotEvaluated = true;
       s.shotState = 'resolving';
@@ -950,11 +1248,13 @@ export const PenaltyArenaGame: React.FC = () => {
 
             let bestPenetration = -Infinity;
             let bestHitRadius = 0;
+            let bestHitPart: 'glove' | 'body' | 'boot' = 'body';
 
             const testCapsule = (
               a: THREE.Vector3,
               b: THREE.Vector3,
-              bodyRadius: number
+              bodyRadius: number,
+              part: 'glove' | 'body' | 'boot'
             ) => {
               const hitRadius = bodyRadius + BALL_RADIUS;
               const distSq = closestPtsOnSegments(
@@ -970,13 +1270,18 @@ export const PenaltyArenaGame: React.FC = () => {
                 if (pen > bestPenetration) {
                   bestPenetration = pen;
                   bestHitRadius = hitRadius;
+                  bestHitPart = part;
                   _bestBallHit.copy(_candBall);
                   _bestKeeperHit.copy(_candKeeper);
                 }
               }
             };
 
-            const testSphere = (pt: THREE.Vector3, bodyRadius: number) => {
+            const testSphere = (
+              pt: THREE.Vector3,
+              bodyRadius: number,
+              part: 'glove' | 'body' | 'boot'
+            ) => {
               const hitRadius = bodyRadius + BALL_RADIUS;
               const distSq = closestPtOnSegmentToPoint(
                 _prevBallPos,
@@ -990,6 +1295,7 @@ export const PenaltyArenaGame: React.FC = () => {
                 if (pen > bestPenetration) {
                   bestPenetration = pen;
                   bestHitRadius = hitRadius;
+                  bestHitPart = part;
                   _bestBallHit.copy(_candBall);
                   _bestKeeperHit.copy(_candKeeper);
                 }
@@ -997,14 +1303,14 @@ export const PenaltyArenaGame: React.FC = () => {
             };
 
             // Tight colliders matching penaltyScene.ts visible geometry dimensions
-            testCapsule(_kPelvis, _kChest, 0.23);
-            testSphere(_kHead, 0.145);
-            testCapsule(_kLShoulder, _kLGlove, 0.068);
-            testSphere(_kLGlove, 0.095);
-            testCapsule(_kRShoulder, _kRGlove, 0.068);
-            testSphere(_kRGlove, 0.095);
-            testCapsule(_kLHip, _kLBoot, 0.085);
-            testCapsule(_kRHip, _kRBoot, 0.085);
+            testCapsule(_kPelvis, _kChest, 0.23, 'body');
+            testSphere(_kHead, 0.145, 'body');
+            testCapsule(_kLShoulder, _kLGlove, 0.068, 'glove');
+            testSphere(_kLGlove, 0.095, 'glove');
+            testCapsule(_kRShoulder, _kRGlove, 0.068, 'glove');
+            testSphere(_kRGlove, 0.095, 'glove');
+            testCapsule(_kLHip, _kLBoot, 0.085, 'boot');
+            testCapsule(_kRHip, _kRBoot, 0.085, 'boot');
 
             if (bestPenetration >= 0) {
               _keeperNormal.subVectors(_bestBallHit, _bestKeeperHit);
@@ -1028,7 +1334,8 @@ export const PenaltyArenaGame: React.FC = () => {
                 Math.max(3.6, Math.abs(s.ballVel.z) * 0.38)
               );
               s.ballCurveAccel = 0;
-              recordOutcome('saved', 'SAVED BY THE KEEPER!');
+              const saveCommentary = buildSaveCommentary(bestHitPart, s.keeperDiveAngle);
+              recordOutcome('saved', { outcome: 'saved', ...saveCommentary });
             }
           }
 
@@ -1050,17 +1357,27 @@ export const PenaltyArenaGame: React.FC = () => {
               s.ballVel.z = Math.max(4.0, Math.abs(s.ballVel.z) * 0.45);
               s.ballVel.y = Math.max(2.0, s.ballVel.y * 0.35 + 2.4);
               s.ballCurveAccel = 0;
-              recordOutcome('post', 'OFF THE WOODWORK!');
+              const postCommentary = buildPostCommentary(hitCrossbar && !hitLeftOrRightPost, crossX);
+              recordOutcome('post', { outcome: 'post', ...postCommentary });
             } else if (absX < GOAL_HALF_W - 0.08 && crossY < GOAL_HEIGHT - 0.08 && crossY >= 0) {
-              recordOutcome('goal', 'GOAL! TOP CLASS FINISH!');
+              const goalCommentary = buildGoalCommentary(
+                crossX,
+                crossY,
+                s.lastShotPower,
+                s.lastShotCurve,
+                s.keeperDiveAngle
+              );
+              recordOutcome('goal', { outcome: 'goal', ...goalCommentary });
             } else {
-              recordOutcome('wide', 'OFF TARGET! WIDE OF THE POST');
+              const wideCommentary = buildWideCommentary(crossX, crossY);
+              recordOutcome('wide', { outcome: 'wide', ...wideCommentary });
             }
           }
 
           // Fallback safety if shot goes far out of bounds before crossing GOAL_Z
           if (!s.shotEvaluated && (s.ballPos.z < GOAL_Z - 3.5 || Math.abs(s.ballPos.x) > 10)) {
-            recordOutcome('wide', 'OFF TARGET! WIDE OF THE POST');
+            const wideCommentary = buildWideCommentary(s.ballPos.x, s.ballPos.y);
+            recordOutcome('wide', { outcome: 'wide', ...wideCommentary });
           }
 
           // Net backstop
@@ -1298,8 +1615,33 @@ export const PenaltyArenaGame: React.FC = () => {
       {phase === 'playing' && (
         <div className="pointer-events-none absolute top-20 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
           {lastBanner && (
-            <div className="rounded-xl border border-[#00ff88]/50 bg-[rgba(10,14,22,0.92)] px-5 py-2 text-sm font-black tracking-wider text-white uppercase">
-              {lastBanner}
+            <div
+              className={`max-w-[90vw] sm:max-w-xl rounded-xl border bg-[rgba(10,14,22,0.94)] px-5 py-2.5 text-center ${
+                lastBanner.outcome === 'goal'
+                  ? 'border-[#00ff88]/60'
+                  : lastBanner.outcome === 'post'
+                  ? 'border-amber-400/60'
+                  : lastBanner.outcome === 'saved'
+                  ? 'border-sky-400/60'
+                  : 'border-[#ff3355]/60'
+              }`}
+            >
+              <div className="text-sm sm:text-base font-black tracking-wider text-white uppercase">
+                {lastBanner.headline}
+              </div>
+              <div
+                className={`mt-0.5 text-[10px] font-bold tracking-[0.2em] uppercase ${
+                  lastBanner.outcome === 'goal'
+                    ? 'text-[#00ff88]'
+                    : lastBanner.outcome === 'post'
+                    ? 'text-amber-400'
+                    : lastBanner.outcome === 'saved'
+                    ? 'text-sky-400'
+                    : 'text-[#ff3355]'
+                }`}
+              >
+                {lastBanner.detail}
+              </div>
             </div>
           )}
           {powerPct > 0 && (

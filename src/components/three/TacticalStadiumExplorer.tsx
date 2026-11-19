@@ -18,6 +18,8 @@ import {
   Camera,
   X,
   Gamepad2,
+  Target,
+  Trophy,
 } from 'lucide-react';
 import { buildTacticalStadium, TacticalPlayerNode } from './stadiumModels';
 
@@ -33,6 +35,15 @@ interface SelectedPlayerInfo {
   team: 'home' | 'away';
   role: string;
   rating: number;
+}
+
+interface GoalEvent {
+  id: string;
+  team: 'home' | 'away';
+  scorerId: string;
+  scorerName: string;
+  scorerNumber: number;
+  playType: string;
 }
 
 // Formation coordinates for 11 players (x: -22..22, z: -15..15)
@@ -147,6 +158,9 @@ const _targetKeyColor = new THREE.Color(0xfff3dc);
 const _targetHemiSky = new THREE.Color(0x6ea8ff);
 const _ballA = new THREE.Vector3();
 const _ballB = new THREE.Vector3();
+const _shotStart = new THREE.Vector3();
+const _shotEnd = new THREE.Vector3();
+const _ledGoalColor = new THREE.Color();
 
 export const TacticalStadiumExplorer: React.FC = () => {
   const canvasMountRef = useRef<HTMLDivElement>(null);
@@ -159,6 +173,11 @@ export const TacticalStadiumExplorer: React.FC = () => {
   const [dockCollapsed, setDockCollapsed] = useState<boolean>(false);
   const [selectedPlayer, setSelectedPlayer] =
     useState<SelectedPlayerInfo | null>(null);
+  const [homeGoals, setHomeGoals] = useState<number>(0);
+  const [awayGoals, setAwayGoals] = useState<number>(0);
+  const [playerGoals, setPlayerGoals] = useState<Record<string, number>>({});
+  const [goalEvents, setGoalEvents] = useState<GoalEvent[]>([]);
+  const [goalBanner, setGoalBanner] = useState<GoalEvent | null>(null);
 
   const stateRef = useRef({
     formation: '4-3-3' as FormationKey,
@@ -167,6 +186,15 @@ export const TacticalStadiumExplorer: React.FC = () => {
     atmosphere: 'night' as AtmosphereMode,
     cameraTransitionActive: false,
     selectedPlayerId: null as string | null,
+    // Tactical ball & goal-finishing state machine
+    passClock: 0,
+    shotPhase: 'passing' as 'passing' | 'shooting' | 'celebrating',
+    shotTimer: 0,
+    attackCycle: 0,
+    shotTeam: 'home' as 'home' | 'away',
+    shotScorerIdx: 10,
+    goalFlashTimer: 0,
+    manualShotQueued: false,
   });
 
   const applyCameraPreset = useCallback((view: CameraView) => {
@@ -175,6 +203,10 @@ export const TacticalStadiumExplorer: React.FC = () => {
     _targetCamPos.set(...preset.pos);
     _targetLookAt.set(...preset.target);
     stateRef.current.cameraTransitionActive = true;
+  }, []);
+
+  const triggerGoalShot = useCallback(() => {
+    stateRef.current.manualShotQueued = true;
   }, []);
 
   useEffect(() => {
@@ -197,11 +229,13 @@ export const TacticalStadiumExplorer: React.FC = () => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyH') {
         setDockCollapsed((v) => !v);
+      } else if (e.code === 'KeyG') {
+        triggerGoalShot();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [triggerGoalShot]);
 
   useEffect(() => {
     const mount = canvasMountRef.current;
@@ -415,13 +449,15 @@ export const TacticalStadiumExplorer: React.FC = () => {
     };
     window.addEventListener('resize', onResize);
 
-    // Passing sequence indices for home build-up / counter / press
+    // Passing sequence indices for home build-up / counter / press + away counters
     const passSequences: Record<PlayMode, number[]> = {
-      buildup: [0, 2, 5, 7, 10, 8, 7, 9],
-      counter: [0, 5, 8, 10, 9],
-      press: [5, 6, 7, 10, 8, 6],
+      buildup: [2, 5, 7, 8, 10],
+      counter: [5, 8, 10],
+      press: [6, 7, 9, 10],
       idle: [7],
     };
+    const awaySequence = [5, 7, 8, 10];
+    let goalCounter = 0;
 
     let frameId = 0;
     let lastTime = performance.now();
@@ -518,23 +554,139 @@ export const TacticalStadiumExplorer: React.FC = () => {
         }
       });
 
-      // 2. Animated Match Ball along Passing Chain
-      const seq = passSequences[s.playMode];
-      if (seq.length > 1 && s.playMode !== 'idle') {
-        const passSpeed = s.playMode === 'counter' ? 1.1 : 0.78;
-        const totalProg = (elapsed * passSpeed) % seq.length;
-        const legIdx = Math.floor(totalProg);
-        const t = totalProg - legIdx;
-        const pFrom = homePlayers[seq[legIdx]] || homePlayers[0];
-        const pTo = homePlayers[seq[(legIdx + 1) % seq.length]] || homePlayers[1];
-        _ballA.set(pFrom.group.position.x + 0.45, 0.28, pFrom.group.position.z);
-        _ballB.set(pTo.group.position.x + 0.45, 0.28, pTo.group.position.z);
-        stadium.ballMesh.position.lerpVectors(_ballA, _ballB, t);
-        const arcH = Math.sin(t * Math.PI) * (s.playMode === 'counter' ? 2.4 : 0.65);
-        stadium.ballMesh.position.y = 0.28 + arcH;
-        stadium.ballMesh.rotation.z -= dt * 8;
+      // 2. Animated Match Ball along Passing Chain -> 3D Shot into Goal Net
+      const beginShotOnGoal = (team: 'home' | 'away') => {
+        const attackers = team === 'home' ? homePlayers : awayPlayers;
+        const candidateIdxs = [10, 8, 9, 7];
+        const chosenIdx = candidateIdxs[s.attackCycle % candidateIdxs.length];
+        const shooter = attackers[chosenIdx] || attackers[10];
+        s.shotPhase = 'shooting';
+        s.shotTimer = 0;
+        s.shotTeam = team;
+        s.shotScorerIdx = chosenIdx;
+        if (shooter) {
+          _shotStart.set(
+            shooter.group.position.x,
+            0.35,
+            shooter.group.position.z
+          );
+        } else {
+          _shotStart.copy(stadium.ballMesh.position);
+        }
+        const netZ = ((s.attackCycle % 3) - 1) * 1.15;
+        const goalX = team === 'home' ? 23.75 : -23.75;
+        _shotEnd.set(goalX, 1.05, netZ);
+      };
+
+      if (s.manualShotQueued) {
+        s.manualShotQueued = false;
+        const team: 'home' | 'away' = s.attackCycle % 3 === 2 ? 'away' : 'home';
+        beginShotOnGoal(team);
+      }
+
+      if (s.shotPhase === 'shooting') {
+        s.shotTimer += dt;
+        const duration = 0.72;
+        const u = Math.min(1, s.shotTimer / duration);
+        stadium.ballMesh.position.lerpVectors(_shotStart, _shotEnd, u);
+        stadium.ballMesh.position.y =
+          THREE.MathUtils.lerp(_shotStart.y, _shotEnd.y, u) +
+          Math.sin(u * Math.PI) * 1.35;
+        stadium.ballMesh.rotation.z -= dt * 16;
+
+        if (u >= 1) {
+          s.shotPhase = 'celebrating';
+          s.shotTimer = 0;
+          s.goalFlashTimer = 1.6;
+          goalCounter += 1;
+
+          const scorers = s.shotTeam === 'home' ? homePlayers : awayPlayers;
+          const scorer = scorers[s.shotScorerIdx] || scorers[10];
+          const playLabel =
+            s.playMode === 'counter'
+              ? 'Counter'
+              : s.playMode === 'press'
+              ? 'High Press'
+              : s.playMode === 'idle'
+              ? 'Set Strike'
+              : 'Build-Up';
+
+          if (s.shotTeam === 'home') {
+            setHomeGoals((g) => g + 1);
+          } else {
+            setAwayGoals((g) => g + 1);
+          }
+
+          if (scorer) {
+            const evt: GoalEvent = {
+              id: `goal-${goalCounter}`,
+              team: s.shotTeam,
+              scorerId: scorer.id,
+              scorerName: scorer.name,
+              scorerNumber: scorer.number,
+              playType: playLabel,
+            };
+            setPlayerGoals((prev) => ({
+              ...prev,
+              [scorer.id]: (prev[scorer.id] ?? 0) + 1,
+            }));
+            setGoalEvents((prev) => [evt, ...prev].slice(0, 6));
+            setGoalBanner(evt);
+          }
+          s.attackCycle += 1;
+        }
+      } else if (s.shotPhase === 'celebrating') {
+        s.shotTimer += dt;
+        // Settle ball inside back of the goal net briefly
+        stadium.ballMesh.position.y = THREE.MathUtils.damp(
+          stadium.ballMesh.position.y,
+          0.28,
+          6,
+          dt
+        );
+        if (s.shotTimer >= 1.35) {
+          s.shotPhase = 'passing';
+          s.passClock = 0;
+          setGoalBanner(null);
+        }
       } else {
-        stadium.ballMesh.position.set(0, 0.28, 0);
+        const isAwayTurn = s.attackCycle % 3 === 2;
+        const seq = isAwayTurn ? awaySequence : passSequences[s.playMode];
+        const teamPlayers = isAwayTurn ? awayPlayers : homePlayers;
+        if (seq.length > 1 && s.playMode !== 'idle') {
+          const passSpeed = s.playMode === 'counter' ? 1.25 : 0.92;
+          s.passClock += dt * passSpeed;
+          if (s.passClock >= seq.length - 1) {
+            beginShotOnGoal(isAwayTurn ? 'away' : 'home');
+          } else {
+            const legIdx = Math.floor(s.passClock);
+            const t = s.passClock - legIdx;
+            const pFrom = teamPlayers[seq[legIdx]] || teamPlayers[0];
+            const pTo = teamPlayers[seq[legIdx + 1]] || teamPlayers[1];
+            const xOffset = isAwayTurn ? -0.45 : 0.45;
+            _ballA.set(pFrom.group.position.x + xOffset, 0.28, pFrom.group.position.z);
+            _ballB.set(pTo.group.position.x + xOffset, 0.28, pTo.group.position.z);
+            stadium.ballMesh.position.lerpVectors(_ballA, _ballB, t);
+            const arcH = Math.sin(t * Math.PI) * (s.playMode === 'counter' ? 2.2 : 0.65);
+            stadium.ballMesh.position.y = 0.28 + arcH;
+            stadium.ballMesh.rotation.z -= dt * 8;
+          }
+        } else {
+          stadium.ballMesh.position.set(0, 0.28, 0);
+        }
+      }
+
+      // Goal Flash Pulse on Stadium Perimeter LED Ring
+      if (s.goalFlashTimer > 0) {
+        s.goalFlashTimer = Math.max(0, s.goalFlashTimer - dt);
+        _ledGoalColor.setHex(s.shotTeam === 'home' ? 0x00ff88 : 0xff3355);
+        stadium.ledMat.color.copy(_ledGoalColor);
+        stadium.ledMat.emissive.copy(_ledGoalColor);
+        stadium.ledMat.emissiveIntensity = 1.6 + Math.sin(elapsed * 24) * 1.1;
+      } else {
+        stadium.ledMat.color.setHex(0x00ff88);
+        stadium.ledMat.emissive.setHex(0x00ff88);
+        stadium.ledMat.emissiveIntensity = 1.4;
       }
 
       stadium.ballShadow.position.set(
@@ -667,8 +819,8 @@ export const TacticalStadiumExplorer: React.FC = () => {
       {/* Full-Bleed WebGL Container */}
       <div ref={canvasMountRef} className="absolute inset-0 h-full w-full" />
 
-      {/* Top-Left Minimal Title & Back Nav (solid rgba, zero backdrop-filter, zero pulsing dots) */}
-      <div className="pointer-events-none absolute top-4 left-4 right-4 z-20 flex items-start justify-between gap-4">
+      {/* Top HUD: Title, Live Goals Scored Scoreboard & Actions */}
+      <div className="pointer-events-none absolute top-4 left-4 right-4 z-20 flex flex-wrap items-start justify-between gap-3">
         <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-[#28344d] bg-[rgba(10,14,24,0.9)] px-3.5 py-2 text-white">
           <Link
             href="/"
@@ -688,7 +840,71 @@ export const TacticalStadiumExplorer: React.FC = () => {
           </div>
         </div>
 
+        {/* Center Live Goals Scored Scoreboard */}
+        <div className="pointer-events-auto flex flex-col items-center gap-1.5">
+          <div className="flex items-center gap-3 rounded-xl border border-[#28344d] bg-[rgba(10,14,24,0.92)] px-4 py-2 text-white">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#00ff88]" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#cbd5e1]">
+                Home XI
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg bg-[#161e30] px-3 py-0.5 text-lg font-black tabular-nums">
+              <span className="text-[#00ff88]">{homeGoals}</span>
+              <span className="text-[#64748b]">-</span>
+              <span className="text-[#ff3355]">{awayGoals}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#cbd5e1]">
+                Away XI
+              </span>
+              <span className="h-2.5 w-2.5 rounded-full bg-[#ff3355]" />
+            </div>
+            <div className="hidden sm:flex items-center gap-1 border-l border-[#28344d] pl-3 text-[10px] font-bold uppercase tracking-wider text-[#94a3b8] tabular-nums">
+              <Trophy className="h-3 w-3 text-[#facc15]" />
+              <span>Goals Scored: {homeGoals + awayGoals}</span>
+            </div>
+          </div>
+
+          {/* Goal Celebration Flash or Recent Scorers Strip */}
+          {goalBanner ? (
+            <div
+              className={`rounded-lg border px-3.5 py-1 text-[11px] font-black uppercase tracking-wider text-white ${
+                goalBanner.team === 'home'
+                  ? 'border-[#00ff88] bg-[rgba(0,40,24,0.92)] text-[#00ff88]'
+                  : 'border-[#ff3355] bg-[rgba(45,8,18,0.92)] text-[#ff3355]'
+              }`}
+            >
+              GOAL! #{goalBanner.scorerNumber} {goalBanner.scorerName} ({goalBanner.playType})
+            </div>
+          ) : goalEvents.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-lg border border-[#242e44] bg-[rgba(10,14,24,0.88)] px-2.5 py-1 text-[10px] font-semibold text-[#cbd5e1]">
+              <span className="text-[#8fa0bd] uppercase font-bold">Scorers:</span>
+              {goalEvents.slice(0, 3).map((ev) => (
+                <span
+                  key={ev.id}
+                  className={`rounded px-1.5 py-0.5 font-bold ${
+                    ev.team === 'home'
+                      ? 'bg-[#00ff88]/15 text-[#00ff88]'
+                      : 'bg-[#ff3355]/15 text-[#ff3355]'
+                  }`}
+                >
+                  #{ev.scorerNumber} {ev.scorerName}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div className="pointer-events-auto flex items-center gap-2">
+          <button
+            onClick={triggerGoalShot}
+            className="flex items-center gap-1.5 rounded-xl border border-[#38bdf8]/50 bg-[rgba(10,14,24,0.9)] px-3 py-2 text-xs font-bold text-[#38bdf8] hover:bg-[#38bdf8] hover:text-black transition-colors"
+            title="Trigger tactical finish on goal (G)"
+          >
+            <Target className="h-3.5 w-3.5" />
+            <span>Goal Shot (G)</span>
+          </button>
           <Link
             href="/penalty-arena"
             className="flex items-center gap-1.5 rounded-xl border border-[#00ff88]/50 bg-[rgba(10,14,24,0.9)] px-3.5 py-2 text-xs font-bold text-[#00ff88] hover:bg-[#00ff88] hover:text-black transition-colors"
@@ -701,7 +917,7 @@ export const TacticalStadiumExplorer: React.FC = () => {
 
       {/* Selected Player Inspection Badge (only shown when a 3D player is clicked) */}
       {selectedPlayer && (
-        <div className="absolute top-20 left-4 z-20 w-64 rounded-xl border border-[#facc15]/60 bg-[rgba(10,14,24,0.92)] p-3.5 text-white">
+        <div className="absolute top-24 left-4 z-20 w-64 rounded-xl border border-[#facc15]/60 bg-[rgba(10,14,24,0.92)] p-3.5 text-white">
           <div className="flex items-start justify-between">
             <div>
               <span
@@ -728,11 +944,19 @@ export const TacticalStadiumExplorer: React.FC = () => {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="mt-2.5 flex items-center justify-between border-t border-[#222d44] pt-2 text-xs">
-            <span className="text-[#94a3b8]">Match Rating</span>
-            <span className="font-black text-[#00ff88] tabular-nums">
-              {selectedPlayer.rating.toFixed(1)}
-            </span>
+          <div className="mt-2.5 space-y-1.5 border-t border-[#222d44] pt-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[#94a3b8]">Match Rating</span>
+              <span className="font-black text-[#00ff88] tabular-nums">
+                {selectedPlayer.rating.toFixed(1)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[#94a3b8]">Goals Scored</span>
+              <span className="font-black text-[#facc15] tabular-nums">
+                {playerGoals[selectedPlayer.id] ?? 0}
+              </span>
+            </div>
           </div>
         </div>
       )}

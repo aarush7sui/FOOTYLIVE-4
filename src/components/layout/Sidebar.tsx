@@ -21,6 +21,7 @@ import {
   Gamepad2,
   MessageSquare,
   Box,
+  History,
 } from 'lucide-react';
 import { Tournament } from '../../types/football';
 
@@ -67,6 +68,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     { id: 'schedule', label: 'Fixtures & Schedule', icon: CalendarDays },
     { id: 'bracket', label: 'Tournament Brackets', icon: GitBranch },
+    {
+      id: 'history',
+      label: 'Tournament History',
+      icon: History,
+      badge: 'D3',
+      badgeColor: 'bg-[#ff3355]/20 text-[#ff5c77]',
+    },
     { id: 'highlights', label: 'Highlights & VOD', icon: PlaySquare },
     { id: 'favorites', label: 'My Watchlist', icon: Bookmark },
   ];
@@ -253,7 +261,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
 
-            {/* World Cup 2026 Daylight Experience Button */}
+            {/* World Cup 2026 Archive Experience Button */}
             <button
               onClick={() => {
                 const el = document.getElementById('world-cup-2026-experience');
@@ -262,14 +270,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs border border-[#0055FF]/40 bg-[#0055FF]/15 text-[#5497ff] hover:bg-[#0055FF] hover:text-white transition-all ${
                 isCollapsed ? 'justify-center' : ''
               }`}
-              title="World Cup 2026 Daylight Experience"
+              title="World Cup 2026 Archive & Hub"
             >
               <span className="text-sm">🌍</span>
               {!isCollapsed && (
                 <div className="flex flex-1 items-center justify-between">
                   <span className="font-bold text-white">World Cup &apos;26</span>
                   <span className="rounded bg-[#FF3D00] px-1.5 py-0.2 text-[9px] font-black text-white">
-                    DAYLIGHT
+                    ARCHIVE
                   </span>
                 </div>
               )}

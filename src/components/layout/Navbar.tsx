@@ -18,6 +18,7 @@ import {
   Gamepad2,
   MessageSquare,
   Box,
+  History,
 } from 'lucide-react';
 import { Tournament, Match } from '../../types/football';
 import { TeamLogo } from '../common/TeamLogo';
@@ -36,6 +37,7 @@ interface NavbarProps {
   liveCount?: number;
   secondsUntilNextSync?: number;
   onOpenChat?: () => void;
+  onOpenHistory?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   liveCount = 0,
   secondsUntilNextSync = 5,
   onOpenChat,
+  onOpenHistory,
 }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('English (Global)');
@@ -275,7 +278,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* World Cup 2026 Daylight Experience Scroll Trigger */}
+          {/* Tournament History (D3 Timeline) Trigger */}
+          {onOpenHistory ? (
+            <button
+              onClick={onOpenHistory}
+              className="hidden lg:flex items-center gap-1.5 rounded-lg border border-[#ff3355]/35 bg-[#ff3355]/10 px-3 py-1.5 text-xs font-bold text-[#ff5c77] hover:bg-[#ff3355] hover:text-white transition-all"
+              title="Explore D3 Tournament History & Winners"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span>Tournament History</span>
+            </button>
+          ) : (
+            <Link
+              href="/tournament-history"
+              className="hidden lg:flex items-center gap-1.5 rounded-lg border border-[#ff3355]/35 bg-[#ff3355]/10 px-3 py-1.5 text-xs font-bold text-[#ff5c77] hover:bg-[#ff3355] hover:text-white transition-all"
+              title="Explore D3 Tournament History & Winners"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span>Tournament History</span>
+            </Link>
+          )}
+
+          {/* World Cup 2026 Archive Scroll Trigger */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -288,7 +312,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>🌍</span>
             <span className="hidden sm:inline">World Cup &apos;26</span>
             <span className="rounded bg-[#FF3D00] px-1.5 py-0.2 text-[9px] font-black text-white">
-              DAYLIGHT
+              ARCHIVE
             </span>
           </motion.button>
 
