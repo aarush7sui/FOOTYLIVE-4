@@ -1,4 +1,3 @@
-import { RequestCookie } from 'next/dist/compiled/@edge-runtime/cookies';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
