@@ -26,6 +26,11 @@ import {
 import { PageLoadCurtain } from '../../components/splash/PageLoadCurtain';
 import { ParticleBurstContainer } from '../../components/worldcup/ParticleBurst';
 import { TiltCard } from '../../components/worldcup/TiltCard';
+import {
+  ParallaxItem,
+  ParallaxMouseLayer,
+  ParallaxScrollProgress,
+} from '../../components/common/ParallaxItem';
 
 // Venues dataset
 const HOST_VENUES = [
@@ -165,21 +170,23 @@ export default function WorldCup2026LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#F7F9FB] text-[#0A1128] font-sans selection:bg-[#0055FF] selection:text-white daylight-pitch-bg relative overflow-x-hidden">
+      <ParallaxScrollProgress color="#0055FF" />
+
       {/* 1) PAGE-LOAD CURTAIN (splash) */}
       <PageLoadCurtain replayTrigger={replayCount} />
 
       {/* Particle Burst System on Click */}
       <ParticleBurstContainer />
 
-      {/* Daylight Faint Pitch Background Overlay */}
-      <div className="fixed inset-0 pointer-events-none z-0 opacity-40">
+      {/* Daylight Faint Pitch Background Overlay with Pointer Depth Parallax */}
+      <ParallaxMouseLayer depth={24} className="fixed inset-0 pointer-events-none z-0 opacity-45">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
           {/* Soccer center circle */}
           <circle cx="50%" cy="40%" r="220" fill="none" stroke="#0055FF" strokeWidth="1" strokeDasharray="6 6" />
           <line x1="0" y1="40%" x2="100%" y2="40%" stroke="#0055FF" strokeWidth="1" strokeDasharray="6 6" />
           <circle cx="50%" cy="40%" r="12" fill="#0055FF" fillOpacity="0.1" />
         </svg>
-      </div>
+      </ParallaxMouseLayer>
 
       {/* Floating Action Button: Replay Opening Animation */}
       <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
@@ -286,12 +293,13 @@ export default function WorldCup2026LandingPage() {
           </motion.div>
 
           {/* Tournament Champions Showcase */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.7, delay: 0.2 }}
-            className="max-w-2xl mx-auto"
-          >
+          <ParallaxItem speed={-18} scaleOnScroll>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              className="max-w-2xl mx-auto"
+            >
             <div className="rounded-3xl border border-white/80 bg-white/80 p-5 sm:p-6 shadow-xl shadow-blue-900/5 backdrop-blur-xl">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
                 <span className="font-mono text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
@@ -307,26 +315,27 @@ export default function WorldCup2026LandingPage() {
                 <div className="rounded-2xl bg-yellow-50/80 p-4 border border-yellow-200 shadow-sm">
                   <span className="text-2xl">🥇</span>
                   <div className="font-mono text-[10px] font-black uppercase text-amber-600 mt-1">CHAMPION</div>
-                  <div className="text-base sm:text-xl font-black text-[#0A1128] mt-0.5">🇦🇷 Argentina</div>
-                  <div className="text-[10px] text-slate-500 mt-1">1 - 0 vs Colombia</div>
+                  <div className="text-base sm:text-xl font-black text-[#0A1128] mt-0.5">🇪🇸 Spain</div>
+                  <div className="text-[10px] text-slate-500 mt-1">1 - 0 vs Argentina (AET)</div>
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200 shadow-sm">
                   <span className="text-2xl">🥈</span>
                   <div className="font-mono text-[10px] font-black uppercase text-slate-500 mt-1">RUNNER-UP</div>
-                  <div className="text-base sm:text-xl font-black text-[#0A1128] mt-0.5">🇨🇴 Colombia</div>
+                  <div className="text-base sm:text-xl font-black text-[#0A1128] mt-0.5">🇦🇷 Argentina</div>
                   <div className="text-[10px] text-slate-500 mt-1">Silver Medal</div>
                 </div>
 
                 <div className="rounded-2xl bg-orange-50/70 p-4 border border-orange-200 shadow-sm">
                   <span className="text-2xl">🥉</span>
                   <div className="font-mono text-[10px] font-black uppercase text-orange-600 mt-1">3RD PLACE</div>
-                  <div className="text-base sm:text-xl font-black text-[#0A1128] mt-0.5">🇫🇷 France</div>
-                  <div className="text-[10px] text-slate-500 mt-1">Bronze Medal</div>
+                  <div className="text-base sm:text-xl font-black text-[#0A1128] mt-0.5">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</div>
+                  <div className="text-[10px] text-slate-500 mt-1">6 - 4 vs France</div>
                 </div>
               </div>
             </div>
-          </motion.div>
+            </motion.div>
+          </ParallaxItem>
 
           {/* Stats Bar (3D Tilt Cards) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto pt-4">
@@ -370,7 +379,8 @@ export default function WorldCup2026LandingPage() {
         </section>
 
         {/* SECTION 2: HOST CITIES & 3D TILT VENUES */}
-        <section id="venues" className="space-y-6 pt-6">
+        <ParallaxItem speed={22}>
+          <section id="venues" className="space-y-6 pt-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <span className="font-mono text-xs font-bold uppercase tracking-widest text-[#FF3D00]">
@@ -467,8 +477,10 @@ export default function WorldCup2026LandingPage() {
             ))}
           </div>
         </section>
+        </ParallaxItem>
 
         {/* SECTION 3: 12 GROUPS INTERACTIVE EXPLORER */}
+        <ParallaxItem speed={-18}>
         <section id="groups" className="space-y-6 pt-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="font-mono text-xs font-bold uppercase tracking-widest text-[#0055FF]">
@@ -547,8 +559,10 @@ export default function WorldCup2026LandingPage() {
             </TiltCard>
           </div>
         </section>
+        </ParallaxItem>
 
         {/* SECTION 4: BLOCKBUSTER MATCHUPS */}
+        <ParallaxItem speed={24}>
         <section id="matchups" className="space-y-6 pt-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="font-mono text-xs font-bold uppercase tracking-widest text-[#FF3D00]">
@@ -642,8 +656,10 @@ export default function WorldCup2026LandingPage() {
             ))}
           </div>
         </section>
+        </ParallaxItem>
 
         {/* SECTION 5: DAYLIGHT PASSES & TICKETING */}
+        <ParallaxItem speed={-16}>
         <section id="tickets" className="space-y-6 pt-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="font-mono text-xs font-bold uppercase tracking-widest text-[#0055FF]">
@@ -746,8 +762,10 @@ export default function WorldCup2026LandingPage() {
             ))}
           </div>
         </section>
+        </ParallaxItem>
 
         {/* SECTION 6: SWITCH BACK TO FOOTYLIVE DAZN DARK ARENA */}
+        <ParallaxItem speed={18} scaleOnScroll>
         <section className="rounded-3xl border border-blue-200 bg-gradient-to-r from-blue-600 to-[#0055FF] p-8 sm:p-12 text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10 max-w-2xl space-y-4">
             <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black uppercase tracking-wider backdrop-blur-md">
@@ -773,6 +791,7 @@ export default function WorldCup2026LandingPage() {
           {/* Decorative background shape */}
           <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
         </section>
+        </ParallaxItem>
       </main>
 
       {/* Daylight Stadium Footer */}

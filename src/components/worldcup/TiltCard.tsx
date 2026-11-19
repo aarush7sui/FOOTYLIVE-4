@@ -1,7 +1,13 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useRef } from 'react';
+import {
+  motion,
+  useMotionValue,
+  useSpring,
+  useMotionTemplate,
+  useReducedMotion,
+} from 'framer-motion';
 
 interface TiltCardProps {
   children: React.ReactNode;
@@ -10,6 +16,9 @@ interface TiltCardProps {
   maxTilt?: number;
 }
 
+/**
+ * 60fps pointer-reactive 3D tilt + inner-depth + specular glare card driven by MotionValues (zero re-renders on hover).
+ */
 export const TiltCard: React.FC<TiltCardProps> = ({
   children,
   className = '',
@@ -17,13 +26,24 @@ export const TiltCard: React.FC<TiltCardProps> = ({
   maxTilt = 7,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [rotateX, setRotateX] = useState(0);
-  const [rotateY, setRotateY] = useState(0);
-  const [glarePosition, setGlarePosition] = useState({ x: 50, y: 50 });
-  const [isHovered, setIsHovered] = useState(false);
+  const prefersReduced = useReducedMotion();
+
+  const rawRotateX = useMotionValue(0);
+  const rawRotateY = useMotionValue(0);
+  const rawScale = useMotionValue(1);
+  const rawGlareX = useMotionValue(50);
+  const rawGlareY = useMotionValue(50);
+  const rawGlareOpacity = useMotionValue(0);
+
+  const rotateX = useSpring(rawRotateX, { stiffness: 320, damping: 24 });
+  const rotateY = useSpring(rawRotateY, { stiffness: 320, damping: 24 });
+  const scale = useSpring(rawScale, { stiffness: 320, damping: 24 });
+  const glareOpacity = useSpring(rawGlareOpacity, { stiffness: 260, damping: 26 });
+
+  const glareBackground = useMotionTemplate`radial-gradient(circle at ${rawGlareX}% ${rawGlareY}%, rgba(255, 255, 255, 0.16) 0%, transparent 65%)`;
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+    if (prefersReduced || !cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -31,23 +51,23 @@ export const TiltCard: React.FC<TiltCardProps> = ({
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
-    const rotX = ((y - centerY) / centerY) * -maxTilt;
-    const rotY = ((x - centerX) / centerX) * maxTilt;
-
-    setRotateX(rotX);
-    setRotateY(rotY);
-    setGlarePosition({
-      x: (x / rect.width) * 100,
-      y: (y / rect.height) * 100,
-    });
+    rawRotateX.set(((y - centerY) / centerY) * -maxTilt);
+    rawRotateY.set(((x - centerX) / centerX) * maxTilt);
+    rawGlareX.set((x / rect.width) * 100);
+    rawGlareY.set((y / rect.height) * 100);
   };
 
-  const handleMouseEnter = () => setIsHovered(true);
+  const handleMouseEnter = () => {
+    if (prefersReduced) return;
+    rawScale.set(1.02);
+    rawGlareOpacity.set(1);
+  };
 
   const handleMouseLeave = () => {
-    setIsHovered(false);
-    setRotateX(0);
-    setRotateY(0);
+    rawRotateX.set(0);
+    rawRotateY.set(0);
+    rawScale.set(1);
+    rawGlareOpacity.set(0);
   };
 
   return (
@@ -57,32 +77,35 @@ export const TiltCard: React.FC<TiltCardProps> = ({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
-      style={{
-        transformStyle: 'preserve-3d',
-      }}
-      animate={{
-        rotateX: isHovered ? rotateX : 0,
-        rotateY: isHovered ? rotateY : 0,
-        scale: isHovered ? 1.02 : 1,
-      }}
-      transition={{
-        type: 'spring',
-        stiffness: 300,
-        damping: 20,
-      }}
-      className={`relative cursor-pointer overflow-hidden rounded-2xl transition-all ${className}`}
+      style={
+        prefersReduced
+          ? undefined
+          : {
+              transformStyle: 'preserve-3d',
+              transformPerspective: 1000,
+              rotateX,
+              rotateY,
+              scale,
+            }
+      }
+      className={`relative cursor-pointer overflow-hidden rounded-2xl transition-colors ${className}`}
     >
       {/* Specular Glare Reflection on Hover */}
-      {isHovered && (
-        <div
-          className="pointer-events-none absolute inset-0 z-20 transition-opacity duration-300"
+      {!prefersReduced && (
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-20"
           style={{
-            background: `radial-gradient(circle at ${glarePosition.x}% ${glarePosition.y}%, rgba(255, 255, 255, 0.15) 0%, transparent 65%)`,
+            opacity: glareOpacity,
+            background: glareBackground,
           }}
         />
       )}
 
-      <div style={{ transform: 'translateZ(20px)' }} className="relative z-10">
+      <div
+        style={prefersReduced ? undefined : { transform: 'translateZ(18px)' }}
+        className="relative z-10 h-full"
+      >
         {children}
       </div>
     </motion.div>

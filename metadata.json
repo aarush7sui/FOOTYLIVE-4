@@ -1,0 +1,8 @@
+{
+  "name": "FOOTYLive",
+  "description": "Live football streaming, worldwide tournaments, scores, 3D penalty arena game, and football-only Gemini AI assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

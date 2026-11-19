@@ -72,8 +72,11 @@ export interface Match {
   status: 'LIVE' | 'UPCOMING' | 'FINISHED' | 'HT';
   kickoffTime: string;
   kickoffDate: string;
+  kickoffIso?: string;
+  leagueSlug?: string;
   stadium: string;
   city: string;
+  attendance?: number;
   viewers?: string;
   streamQuality?: string;
   channels?: string[];

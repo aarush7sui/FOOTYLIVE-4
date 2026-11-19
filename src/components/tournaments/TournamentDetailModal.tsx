@@ -1,20 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
   Trophy,
-  Users,
-  Calendar,
-  Award,
   Globe,
   Radio,
-  Flame,
-  CheckCircle,
-  ExternalLink,
   RefreshCw,
   AlertCircle,
+  Calendar,
 } from 'lucide-react';
 import { Tournament, StandingItem } from '../../types/football';
 import { TeamLogo } from '../common/TeamLogo';
@@ -26,43 +21,87 @@ interface TournamentDetailModalProps {
   onSelectMatchFixture?: (home: string, away: string) => void;
 }
 
+interface LiveLeagueStanding extends StandingItem {
+  gf?: number;
+  ga?: number;
+  streak?: string;
+}
+
+interface LiveLeagueFixture {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeLogo?: string;
+  awayLogo?: string;
+  date: string;
+  time: string;
+  stage: string;
+  stadium: string;
+  status: string;
+  score?: string;
+}
+
+interface LiveMatchScorer {
+  name: string;
+  team: string;
+  goals: number;
+}
+
+interface AttackingClubRow {
+  rank: number;
+  team: string;
+  logo?: string;
+  goalsFor: number;
+  goalsAgainst: number;
+  gd: number;
+  played: number;
+  points: number;
+}
+
 export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
   tournament,
   onClose,
   onSelectMatchFixture,
 }) => {
   const [activeTab, setActiveTab] = useState<'standings' | 'fixtures' | 'scorers' | 'info'>('standings');
-  const [liveStandings, setLiveStandings] = useState<StandingItem[]>([]);
+  const [liveStandings, setLiveStandings] = useState<LiveLeagueStanding[]>([]);
+  const [fixtures, setFixtures] = useState<LiveLeagueFixture[]>([]);
+  const [scorers, setScorers] = useState<LiveMatchScorer[]>([]);
+  const [attackingClubs, setAttackingClubs] = useState<AttackingClubRow[]>([]);
   const [isLoadingStandings, setIsLoadingStandings] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch real-world live standings from ESPN API when tournament opens
-  const fetchStandings = async () => {
+  const fetchStandings = useCallback(async () => {
     if (!tournament) return;
     try {
       setIsLoadingStandings(true);
       setError(null);
       const res = await fetch(`/api/standings?league=${tournament.id}`);
-      if (!res.ok) {
-        throw new Error(`Standings telemetry responded with status ${res.status}`);
-      }
       const data = await res.json();
-      if (data.success && Array.isArray(data.standings) && data.standings.length > 0) {
-        setLiveStandings(data.standings);
-      } else {
-        throw new Error(data.error || 'No live standings data returned for this competition');
+      if (!res.ok && !data.success) {
+        throw new Error(data.error || `Standings telemetry responded with status ${res.status}`);
       }
-    } catch (err: any) {
-      setError(err.message || 'Unable to connect to live standings feed');
+      setLiveStandings(Array.isArray(data.standings) ? data.standings : []);
+      setFixtures(Array.isArray(data.fixtures) ? data.fixtures : []);
+      setScorers(Array.isArray(data.scorers) ? data.scorers : []);
+      setAttackingClubs(Array.isArray(data.attackingClubs) ? data.attackingClubs : []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to connect to live standings feed');
       setLiveStandings([]);
+      setFixtures([]);
+      setScorers([]);
+      setAttackingClubs([]);
     } finally {
       setIsLoadingStandings(false);
     }
-  };
+  }, [tournament]);
 
   useEffect(() => {
-    fetchStandings();
-  }, [tournament]);
+    const t = setTimeout(() => {
+      void fetchStandings();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [fetchStandings]);
 
   if (!tournament) return null;
 
@@ -107,18 +146,18 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                   <span>•</span>
                   <span>Status: <strong className="text-[#00ff88]">{tournament.currentPhase}</strong></span>
                   <span>•</span>
-                  <span>Champions: <strong className="text-white">🏆 {tournament.defendingChampion}</strong></span>
+                  <span>Champion / Title: <strong className="text-white">🏆 {tournament.defendingChampion}</strong></span>
                 </div>
               </div>
             </div>
 
-            {/* Navigation Tabs with Framer Motion Sliding Pill */}
+            {/* Navigation Tabs */}
             <div className="flex items-center gap-2 mt-5 border-t border-[#1e2436] pt-3 overflow-x-auto no-scrollbar">
               {[
-                { id: 'standings', label: 'League Table & Standings' },
-                { id: 'fixtures', label: 'Fixtures & Schedule' },
-                { id: 'scorers', label: 'Top Scorers' },
-                { id: 'info', label: 'Tournament Overview' },
+                { id: 'standings' as const, label: 'League Table & Standings' },
+                { id: 'fixtures' as const, label: `Fixtures & Results (${fixtures.length})` },
+                { id: 'scorers' as const, label: 'Attack & Goal Leaders' },
+                { id: 'info' as const, label: 'Tournament Overview' },
               ].map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -126,7 +165,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     key={tab.id}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => setActiveTab(tab.id)}
                     className="relative rounded-lg px-3.5 py-1.5 text-xs font-bold whitespace-nowrap transition-all"
                   >
                     {isActive && (
@@ -157,11 +196,17 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     <AlertCircle className="h-6 w-6 text-red-400 mx-auto mb-2" />
                     <p className="text-xs text-red-300 font-mono mb-3">{error}</p>
                     <button
-                      onClick={fetchStandings}
+                      onClick={() => void fetchStandings()}
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-xs text-red-300 font-bold transition-colors"
                     >
                       <RefreshCw className="h-3.5 w-3.5" /> Reconnect to Live Standings Feed
                     </button>
+                  </div>
+                )}
+
+                {!isLoadingStandings && !error && liveStandings.length === 0 && (
+                  <div className="rounded-xl border border-[#232838] bg-[#121520] p-6 text-center text-xs text-[#8b94a5]">
+                    ESPN does not publish a live league table for this knockout stage right now. Switch to Fixtures &amp; Results to view live matches.
                   </div>
                 )}
 
@@ -176,9 +221,10 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                           <th className="py-2.5 px-3 text-center">W</th>
                           <th className="py-2.5 px-3 text-center">D</th>
                           <th className="py-2.5 px-3 text-center">L</th>
+                          <th className="py-2.5 px-3 text-center">GF/GA</th>
                           <th className="py-2.5 px-3 text-center">GD</th>
                           <th className="py-2.5 px-3 text-center font-bold text-white">PTS</th>
-                          <th className="py-2.5 px-3 text-center">Recent Form</th>
+                          <th className="py-2.5 px-3 text-center">Form / Streak</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -211,28 +257,37 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                             <td className="py-2.5 px-3 text-center font-mono text-[#8b94a5]">{row.drawn}</td>
                             <td className="py-2.5 px-3 text-center font-mono text-[#8b94a5]">{row.lost}</td>
                             <td className="py-2.5 px-3 text-center font-mono text-[#8b94a5]">
+                              {row.gf ?? 0}:{row.ga ?? 0}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-mono text-[#8b94a5]">
                               {row.gd > 0 ? `+${row.gd}` : row.gd}
                             </td>
                             <td className="py-2.5 px-3 text-center font-mono font-black text-white text-sm">
                               {row.points}
                             </td>
-                            <td className="py-2.5 px-3">
-                              <div className="flex items-center justify-center gap-1">
-                                {row.form.map((res, i) => (
-                                  <span
-                                    key={i}
-                                    className={`flex h-4 w-4 items-center justify-center rounded text-[9px] font-black font-mono ${
-                                      res === 'W'
-                                        ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/40'
-                                        : res === 'D'
-                                        ? 'bg-[#ffaa00]/20 text-[#ffaa00] border border-[#ffaa00]/40'
-                                        : 'bg-red-500/20 text-red-400 border border-red-500/40'
-                                    }`}
-                                  >
-                                    {res}
-                                  </span>
-                                ))}
-                              </div>
+                            <td className="py-2.5 px-3 text-center">
+                              {row.form && row.form.length > 0 ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  {row.form.map((res, i) => (
+                                    <span
+                                      key={i}
+                                      className={`flex h-4 w-4 items-center justify-center rounded text-[9px] font-black font-mono ${
+                                        res === 'W'
+                                          ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/40'
+                                          : res === 'D'
+                                          ? 'bg-[#ffaa00]/20 text-[#ffaa00] border border-[#ffaa00]/40'
+                                          : 'bg-red-500/20 text-red-400 border border-red-500/40'
+                                      }`}
+                                    >
+                                      {res}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="font-mono text-[11px] text-[#00ff88]">
+                                  {row.streak || '—'}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -243,70 +298,124 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
               </div>
             )}
 
-            {/* Fixtures Tab */}
+            {/* Real Live Fixtures Tab */}
             {activeTab === 'fixtures' && (
               <div className="space-y-3">
                 <div className="rounded-xl border border-[#232838] bg-[#121520] p-4">
                   <div className="flex items-center justify-between mb-3 text-xs text-[#8b94a5] font-mono">
-                    <span>Official Matchday Schedule</span>
-                    <span className="text-[#00ff88]">Live Synchronized</span>
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-[#00ff88]" />
+                      Official Live ESPN Scoreboard Fixtures
+                    </span>
+                    <span className="text-[#00ff88]">{fixtures.length} Listed</span>
                   </div>
-                  <div className="space-y-2">
-                    {[
-                      { home: 'Top Seed A', away: 'Challenger B', time: 'Tomorrow • 20:00 GMT', venue: 'Main Arena' },
-                      { home: 'League Leader', away: 'Rival FC', time: 'Saturday • 17:30 GMT', venue: 'Metropolitan Stadium' },
-                      { home: 'Continental Contender', away: 'Domestic Champ', time: 'Sunday • 19:45 GMT', venue: 'National Bowl' },
-                    ].map((fixture, idx) => (
-                      <div
-                        key={idx}
-                        className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-[#161a27] border border-[#202638] hover:border-[#00ff88]/40 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-white">{fixture.home}</span>
-                          <span className="text-[10px] font-mono text-[#00ff88] bg-[#00ff88]/10 px-1.5 py-0.5 rounded">VS</span>
-                          <span className="text-xs font-bold text-white">{fixture.away}</span>
-                        </div>
-                        <div className="text-[11px] font-mono text-[#8b94a5]">
-                          {fixture.time} • {fixture.venue}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+
+                  {fixtures.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-[#8b94a5]">
+                      No active or scheduled fixtures returned by ESPN for this competition today.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {fixtures.map((fixture) => (
+                        <button
+                          key={fixture.id}
+                          type="button"
+                          onClick={() => onSelectMatchFixture?.(fixture.homeTeam, fixture.awayTeam)}
+                          className="w-full text-left flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-[#161a27] border border-[#202638] hover:border-[#00ff88]/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <TeamLogo logo={fixture.homeLogo} name={fixture.homeTeam} className="h-4 w-4" />
+                              <span className="text-xs font-bold text-white">{fixture.homeTeam}</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-[#00ff88] bg-[#00ff88]/10 px-1.5 py-0.5 rounded">
+                              {fixture.score || 'VS'}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <TeamLogo logo={fixture.awayLogo} name={fixture.awayTeam} className="h-4 w-4" />
+                              <span className="text-xs font-bold text-white">{fixture.awayTeam}</span>
+                            </div>
+                          </div>
+                          <div className="text-[11px] font-mono text-[#8b94a5]">
+                            {fixture.date} • {fixture.time} • {fixture.stadium}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Scorers Tab */}
+            {/* Real Scorers & Attacking Clubs Tab */}
             {activeTab === 'scorers' && (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-[#232838] bg-[#121520] p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Trophy className="h-4 w-4 text-[#ffaa00]" />
-                    <h3 className="text-xs font-bold uppercase text-white font-mono">Top Scorer Leaderboard</h3>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { rank: 1, name: 'Leading Striker', team: 'League Leaders', goals: 14, assists: 5 },
-                      { rank: 2, name: 'Key Winger', team: 'Top 4 Contender', goals: 11, assists: 7 },
-                      { rank: 3, name: 'Attacking Playmaker', team: 'European Finalist', goals: 9, assists: 8 },
-                    ].map((scorer) => (
-                      <div
-                        key={scorer.rank}
-                        className="flex items-center justify-between p-3 rounded-lg bg-[#161a27] border border-[#202638]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono font-bold text-xs text-[#00ff88]">#{scorer.rank}</span>
-                          <div>
-                            <div className="text-xs font-bold text-white">{scorer.name}</div>
-                            <div className="text-[10px] text-[#8b94a5]">{scorer.team}</div>
+              <div className="space-y-4">
+                {scorers.length > 0 && (
+                  <div className="rounded-xl border border-[#232838] bg-[#121520] p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Trophy className="h-4 w-4 text-[#ffaa00]" />
+                      <h3 className="text-xs font-bold uppercase text-white font-mono">
+                        Live Matchday Goalscorers
+                      </h3>
+                    </div>
+                    <div className="space-y-2">
+                      {scorers.map((scorer, idx) => (
+                        <div
+                          key={`${scorer.name}-${scorer.team}`}
+                          className="flex items-center justify-between p-3 rounded-lg bg-[#161a27] border border-[#202638]"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-bold text-xs text-[#00ff88]">#{idx + 1}</span>
+                            <div>
+                              <div className="text-xs font-bold text-white">{scorer.name}</div>
+                              <div className="text-[10px] text-[#8b94a5]">{scorer.team}</div>
+                            </div>
+                          </div>
+                          <div className="font-mono text-xs text-white">
+                            <strong className="text-[#00ff88] text-sm">{scorer.goals}</strong> goal{scorer.goals > 1 ? 's' : ''}
                           </div>
                         </div>
-                        <div className="font-mono text-xs text-white">
-                          <strong className="text-[#00ff88] text-sm">{scorer.goals}</strong> goals ({scorer.assists} assists)
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
+                )}
+
+                <div className="rounded-xl border border-[#232838] bg-[#121520] p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Trophy className="h-4 w-4 text-[#00ff88]" />
+                    <h3 className="text-xs font-bold uppercase text-white font-mono">
+                      Top Attacking Clubs (Live Goals Scored)
+                    </h3>
+                  </div>
+
+                  {attackingClubs.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-[#8b94a5]">
+                      No live goals statistics currently published for this tournament.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {attackingClubs.map((club) => (
+                        <div
+                          key={club.team}
+                          className="flex items-center justify-between p-3 rounded-lg bg-[#161a27] border border-[#202638]"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-bold text-xs text-[#00ff88]">#{club.rank}</span>
+                            <TeamLogo logo={club.logo} name={club.team} className="h-5 w-5" />
+                            <div>
+                              <div className="text-xs font-bold text-white">{club.team}</div>
+                              <div className="text-[10px] text-[#8b94a5]">
+                                {club.played} played • GD {club.gd > 0 ? `+${club.gd}` : club.gd}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="font-mono text-xs text-white">
+                            <strong className="text-[#00ff88] text-sm">{club.goalsFor}</strong> GF ({club.goalsAgainst} GA)
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -344,21 +453,21 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
 
                 <div className="rounded-xl border border-[#232838] bg-[#121520] p-4 space-y-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#00ff88] font-mono flex items-center gap-2">
-                    <Radio className="h-4 w-4" /> Broadcast & Technology
+                    <Radio className="h-4 w-4" /> Broadcast &amp; Telemetry
                   </h3>
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between py-1 border-b border-[#1c2233]">
-                      <span className="text-[#8b94a5]">Stream Telemetry:</span>
-                      <span className="font-bold text-[#00ff88]">Live 4K Ultra HDR</span>
+                      <span className="text-[#8b94a5]">Data Feed:</span>
+                      <span className="font-bold text-[#00ff88]">Live ESPN Satellite API</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-[#1c2233]">
                       <span className="text-[#8b94a5]">Official Match Ball:</span>
-                      <span className="font-bold text-white">{tournament.officialBall || 'Standard FIFA Matchball'}</span>
+                      <span className="font-bold text-white">{tournament.officialBall || 'Standard Matchball'}</span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="text-[#8b94a5]">Broadcast Rights:</span>
+                      <span className="text-[#8b94a5]">Broadcast Partners:</span>
                       <span className="font-bold text-white truncate max-w-[160px]">
-                        {tournament.broadcastPartners?.join(', ') || 'FOOTYLive Satellite'}
+                        {tournament.broadcastPartners?.join(', ') || 'Official Broadcasters'}
                       </span>
                     </div>
                   </div>

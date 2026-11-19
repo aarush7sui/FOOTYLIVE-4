@@ -1,12 +1,45 @@
 import { NextResponse } from 'next/server';
 import { Tournament } from '../../../types/football';
 
+interface EspnLeagueMetaResponse {
+  leagues?: Array<{
+    season?: { displayName?: string };
+  }>;
+  events?: Array<{
+    competitions?: Array<{
+      status?: { type?: { state?: string } };
+    }>;
+  }>;
+}
+
+async function fetchLeagueTelemetry(espnSlug: string): Promise<{ season?: string; activeCount: number; liveCount: number }> {
+  try {
+    const res = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/${espnSlug}/scoreboard`,
+      { next: { revalidate: 120 } }
+    );
+    if (!res.ok) return { activeCount: 0, liveCount: 0 };
+    const json = (await res.json()) as EspnLeagueMetaResponse;
+    const events = json.events || [];
+    const liveCount = events.filter(
+      (e) => e.competitions?.[0]?.status?.type?.state === 'in'
+    ).length;
+    return {
+      season: json.leagues?.[0]?.season?.displayName,
+      activeCount: events.length,
+      liveCount,
+    };
+  } catch {
+    return { activeCount: 0, liveCount: 0 };
+  }
+}
+
 export async function GET() {
   try {
-    // Worldwide football leagues & competitions configuration
-    const tournaments: Tournament[] = [
+    const baseTournaments: Array<Tournament & { espnSlug: string }> = [
       {
         id: 'fifa-world-cup-2026',
+        espnSlug: 'fifa.world',
         name: 'FIFA World Cup 2026',
         shortName: 'World Cup 26',
         confederation: 'FIFA',
@@ -14,16 +47,17 @@ export async function GET() {
         country: 'USA / Mexico / Canada',
         flag: '🌍',
         tier: 'International',
-        currentSeason: '2026 (Completed)',
-        currentPhase: 'Tournament Completed (July 19, 2026)',
-        defendingChampion: 'Argentina (Back-to-Back 2022 & 2026)',
-        broadcastPartners: ['FOOTYLive 4K', 'FOX Sports', 'Telemundo', 'BBC / ITV'],
-        officialBall: 'adidas OCEAUNZ Pro 2026',
+        currentSeason: '2026 FIFA World Cup',
+        currentPhase: 'Completed • Champions: Spain',
+        defendingChampion: 'Spain (1-0 vs Argentina AET)',
+        broadcastPartners: ['ESPN', 'FOX Sports', 'Telemundo', 'BBC / ITV'],
+        officialBall: 'adidas Trionda 2026',
         totalTeams: 48,
         venueCount: 16,
       },
       {
         id: 'uefa-champions-league',
+        espnSlug: 'uefa.champions',
         name: 'UEFA Champions League',
         shortName: 'UCL',
         confederation: 'UEFA',
@@ -31,16 +65,17 @@ export async function GET() {
         country: 'Europe',
         flag: '⭐',
         tier: 'Club',
-        currentSeason: '2026/27',
-        currentPhase: 'League Phase',
-        defendingChampion: 'Real Madrid',
-        broadcastPartners: ['FOOTYLive Main 4K', 'TNT Sports', 'CBS Sports Paramount+'],
-        officialBall: 'adidas UCL Pro Pyrostorm',
+        currentSeason: '2026-27',
+        currentPhase: 'Live Competition',
+        defendingChampion: 'UEFA Champions League',
+        broadcastPartners: ['TNT Sports', 'CBS Sports Paramount+', 'DAZN'],
+        officialBall: 'adidas UCL Pro',
         totalTeams: 36,
         venueCount: 36,
       },
       {
         id: 'premier-league',
+        espnSlug: 'eng.1',
         name: 'Premier League',
         shortName: 'EPL',
         confederation: 'UEFA',
@@ -48,16 +83,17 @@ export async function GET() {
         country: 'England',
         flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
         tier: 'Club',
-        currentSeason: '2026/27',
-        currentPhase: 'Regular Season (Matchday 12)',
-        defendingChampion: 'Manchester City',
-        broadcastPartners: ['FOOTYLive Ultra', 'Sky Sports Main Event', 'NBC Peacock'],
-        officialBall: 'Nike Flight Premier League',
+        currentSeason: '2026-27',
+        currentPhase: 'Regular Season',
+        defendingChampion: 'English Top Flight',
+        broadcastPartners: ['Sky Sports Main Event', 'NBC Peacock'],
+        officialBall: 'Puma Orbita Premier League',
         totalTeams: 20,
         venueCount: 20,
       },
       {
         id: 'la-liga',
+        espnSlug: 'esp.1',
         name: 'La Liga EA Sports',
         shortName: 'La Liga',
         confederation: 'UEFA',
@@ -65,16 +101,17 @@ export async function GET() {
         country: 'Spain',
         flag: '🇪🇸',
         tier: 'Club',
-        currentSeason: '2026/27',
-        currentPhase: 'Jornada 13',
-        defendingChampion: 'Real Madrid',
-        broadcastPartners: ['FOOTYLive España', 'DAZN LaLiga', 'ESPN+'],
+        currentSeason: '2026-27',
+        currentPhase: 'Regular Season',
+        defendingChampion: 'Spanish Top Flight',
+        broadcastPartners: ['DAZN LaLiga', 'ESPN+'],
         officialBall: 'Puma Orbita La Liga',
         totalTeams: 20,
         venueCount: 20,
       },
       {
         id: 'serie-a',
+        espnSlug: 'ita.1',
         name: 'Serie A Made in Italy',
         shortName: 'Serie A',
         confederation: 'UEFA',
@@ -82,16 +119,17 @@ export async function GET() {
         country: 'Italy',
         flag: '🇮🇹',
         tier: 'Club',
-        currentSeason: '2026/27',
-        currentPhase: 'Giornata 12',
-        defendingChampion: 'Inter Milan',
-        broadcastPartners: ['FOOTYLive Italia', 'DAZN Italia', 'Paramount+'],
+        currentSeason: '2026-27',
+        currentPhase: 'Regular Season',
+        defendingChampion: 'Italian Top Flight',
+        broadcastPartners: ['DAZN Italia', 'Paramount+'],
         officialBall: 'Puma Orbita Serie A',
         totalTeams: 20,
         venueCount: 20,
       },
       {
         id: 'bundesliga',
+        espnSlug: 'ger.1',
         name: 'Bundesliga',
         shortName: 'Bundesliga',
         confederation: 'UEFA',
@@ -99,16 +137,17 @@ export async function GET() {
         country: 'Germany',
         flag: '🇩🇪',
         tier: 'Club',
-        currentSeason: '2026/27',
-        currentPhase: 'Spieltag 11',
-        defendingChampion: 'Bayer Leverkusen',
-        broadcastPartners: ['FOOTYLive DE', 'Sky Sport Bundesliga', 'ESPN+'],
-        officialBall: 'Derbystar Bundesliga Brillant APS',
+        currentSeason: '2026-27',
+        currentPhase: 'Regular Season',
+        defendingChampion: 'German Top Flight',
+        broadcastPartners: ['Sky Sport Bundesliga', 'ESPN+'],
+        officialBall: 'Derbystar Bundesliga APS',
         totalTeams: 18,
         venueCount: 18,
       },
       {
         id: 'ligue-1',
+        espnSlug: 'fra.1',
         name: 'Ligue 1 McDonald’s',
         shortName: 'Ligue 1',
         confederation: 'UEFA',
@@ -116,16 +155,17 @@ export async function GET() {
         country: 'France',
         flag: '🇫🇷',
         tier: 'Club',
-        currentSeason: '2026/27',
-        currentPhase: 'Journée 12',
-        defendingChampion: 'Paris Saint-Germain',
-        broadcastPartners: ['FOOTYLive France', 'DAZN France', 'beIN Sports'],
+        currentSeason: '2026-27',
+        currentPhase: 'Regular Season',
+        defendingChampion: 'French Top Flight',
+        broadcastPartners: ['DAZN France', 'beIN Sports'],
         officialBall: 'Kipsta Ligue 1 Pro',
         totalTeams: 18,
         venueCount: 18,
       },
       {
         id: 'saudi-pro-league',
+        espnSlug: 'sau.1',
         name: 'Roshn Saudi League',
         shortName: 'SPL',
         confederation: 'AFC',
@@ -133,16 +173,17 @@ export async function GET() {
         country: 'Saudi Arabia',
         flag: '🇸🇦',
         tier: 'Club',
-        currentSeason: '2026/27',
-        currentPhase: 'Round 10',
-        defendingChampion: 'Al-Hilal',
-        broadcastPartners: ['FOOTYLive Saudi 4K', 'SSC Sports', 'Shahid VIP'],
-        officialBall: 'Nike Flight Saudi Pro',
+        currentSeason: '2026-27',
+        currentPhase: 'Regular Season',
+        defendingChampion: 'Saudi Pro League',
+        broadcastPartners: ['SSC Sports', 'Shahid VIP'],
+        officialBall: 'Saudi Pro Matchball',
         totalTeams: 18,
         venueCount: 18,
       },
       {
         id: 'mls',
+        espnSlug: 'usa.1',
         name: 'Major League Soccer',
         shortName: 'MLS',
         confederation: 'CONCACAF',
@@ -151,15 +192,16 @@ export async function GET() {
         flag: '🇺🇸',
         tier: 'Club',
         currentSeason: '2026',
-        currentPhase: 'MLS Cup Playoffs Final',
-        defendingChampion: 'Columbus Crew',
-        broadcastPartners: ['FOOTYLive MLS', 'Apple TV MLS Season Pass'],
-        officialBall: 'adidas MLS Pro Nativo',
+        currentPhase: 'MLS Season',
+        defendingChampion: 'Major League Soccer',
+        broadcastPartners: ['Apple TV MLS Season Pass', 'FOX'],
+        officialBall: 'adidas MLS Pro',
         totalTeams: 30,
         venueCount: 30,
       },
       {
         id: 'copa-libertadores',
+        espnSlug: 'conmebol.libertadores',
         name: 'CONMEBOL Copa Libertadores',
         shortName: 'Libertadores',
         confederation: 'CONMEBOL',
@@ -168,22 +210,44 @@ export async function GET() {
         flag: '🏆',
         tier: 'Club',
         currentSeason: '2026',
-        currentPhase: 'Final Única',
-        defendingChampion: 'Fluminense',
-        broadcastPartners: ['FOOTYLive Sudamérica', 'ESPN Brasil', 'Star+'],
-        officialBall: 'Puma Cumbre Conmebol',
+        currentPhase: 'Final Stage',
+        defendingChampion: 'CONMEBOL Libertadores',
+        broadcastPartners: ['ESPN', 'Globo', 'Paramount+'],
+        officialBall: 'Puma Cumbre CONMEBOL',
         totalTeams: 32,
         venueCount: 32,
       },
     ];
 
+    const telemetryList = await Promise.all(
+      baseTournaments.map((t) => fetchLeagueTelemetry(t.espnSlug))
+    );
+
+    const tournaments: Tournament[] = baseTournaments.map((t, idx) => {
+      const meta = telemetryList[idx];
+      const { espnSlug: _unused, ...rest } = t;
+      void _unused;
+      const phaseLabel =
+        meta.liveCount > 0
+          ? `${meta.liveCount} Live Match${meta.liveCount > 1 ? 'es' : ''} Now`
+          : meta.activeCount > 0
+          ? `${meta.activeCount} Scheduled / Active Fixtures`
+          : rest.currentPhase;
+      return {
+        ...rest,
+        currentSeason: meta.season || rest.currentSeason,
+        currentPhase: rest.id === 'fifa-world-cup-2026' ? rest.currentPhase : phaseLabel,
+      };
+    });
+
     return NextResponse.json({
       success: true,
       tournaments,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to fetch tournaments', tournaments: [] },
+      { success: false, error: message, tournaments: [] },
       { status: 500 }
     );
   }

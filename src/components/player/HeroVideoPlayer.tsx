@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { TeamLogo } from '../common/TeamLogo';
 import {
   Play,
@@ -43,45 +43,74 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
   const [activeTab, setActiveTab] = useState<'stats' | 'lineups' | 'events' | 'chat'>('stats');
   const [showMatchDrawer, setShowMatchDrawer] = useState(true);
 
-  // Stream settings
-  const [selectedQuality, setSelectedQuality] = useState<string>(match.streamQuality || '4K HDR');
+  // Stream settings (match-scoped overrides so switching matches resets cleanly without useEffect setState)
+  const [qualityByMatch, setQualityByMatch] = useState<Record<string, string>>({});
   const [showQualityMenu, setShowQualityMenu] = useState(false);
 
-  const [selectedAngle, setSelectedAngle] = useState(match.cameraAngles?.[0]?.name || 'Tactical Cam 1');
+  const [angleByMatch, setAngleByMatch] = useState<Record<string, string>>({});
   const [showAngleMenu, setShowAngleMenu] = useState(false);
 
-  const [selectedCommentary, setSelectedCommentary] = useState(
-    match.commentaryTracks?.[0]?.language || 'English (UK)'
-  );
+  const [commentaryByMatch, setCommentaryByMatch] = useState<Record<string, string>>({});
   const [showCommentaryMenu, setShowCommentaryMenu] = useState(false);
 
-  // Sync state when active match changes
-  useEffect(() => {
-    setSelectedQuality(match.streamQuality || '4K HDR');
-    if (match.cameraAngles && match.cameraAngles.length > 0) {
-      setSelectedAngle(match.cameraAngles[0].name);
-    }
-    if (match.commentaryTracks && match.commentaryTracks.length > 0) {
-      setSelectedCommentary(match.commentaryTracks[0].language);
-    }
-  }, [match.id, match.streamQuality]);
+  const selectedQuality = qualityByMatch[match.id] ?? match.streamQuality ?? '4K HDR';
+  const setSelectedQuality = (val: string) =>
+    setQualityByMatch((prev) => ({ ...prev, [match.id]: val }));
 
-  // Fan chat messages
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; user: string; text: string; time: string; team?: string }>>([
-    { id: 'c1', user: 'Madridista_07', text: 'BELLINGHAM IS HIM! WHAT A VOLLEY ⚽🔥', time: '74\'', team: 'RMA' },
-    { id: 'c2', user: 'CityzensDaily', text: 'De Bruyne and Haaland connection is unstoppable tonight', time: '75\'', team: 'MCI' },
-    { id: 'c3', user: 'KroosControl', text: 'Ancelotti make the sub bring on Modrić please', time: '77\'', team: 'RMA' },
-    { id: 'c4', user: 'TacticsJunkie', text: 'Both managers playing at insane tactical level, 2.18 xG vs 1.94 xG', time: '78\'' },
-  ]);
+  const selectedAngle =
+    angleByMatch[match.id] ?? match.cameraAngles?.[0]?.name ?? 'Tactical Cam 1';
+  const setSelectedAngle = (val: string) =>
+    setAngleByMatch((prev) => ({ ...prev, [match.id]: val }));
+
+  const selectedCommentary =
+    commentaryByMatch[match.id] ?? match.commentaryTracks?.[0]?.language ?? 'English (Live)';
+  const setSelectedCommentary = (val: string) =>
+    setCommentaryByMatch((prev) => ({ ...prev, [match.id]: val }));
+
+  // Match commentary & user chat messages (initialized from real match events, never hardcoded clubs)
+  const [userChatByMatch, setUserChatByMatch] = useState<
+    Record<string, Array<{ id: string; user: string; text: string; time: string }>>
+  >({});
   const [newChatMessage, setNewChatMessage] = useState('');
   const [floatingReactions, setFloatingReactions] = useState<Array<{ id: number; emoji: string; x: number }>>([]);
+  const reactionCounterRef = useRef(0);
+
+  const eventFeedMessages = (match.events || []).map((ev, idx) => ({
+    id: `ev-chat-${ev.id || idx}`,
+    user: `${ev.team === 'home' ? match.homeTeam.code : match.awayTeam.code} Live Feed`,
+    text: `${ev.type === 'goal' ? '⚽ GOAL!' : ev.type === 'red_card' ? '🟥 RED CARD' : ev.type === 'yellow_card' ? '🟨 BOOKING' : '🔄 EVENT'} ${ev.player} (${ev.detail || 'Match update'})`,
+    time: `${ev.minute}'`,
+  }));
+  const chatMessages = [
+    ...eventFeedMessages,
+    ...(userChatByMatch[match.id] || []),
+  ];
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const arenaMouseX = useMotionValue(0);
+  const arenaMouseY = useMotionValue(0);
+  const bgParallaxX = useSpring(useTransform(arenaMouseX, [-1, 1], [14, -14]), { stiffness: 160, damping: 24 });
+  const bgParallaxY = useSpring(useTransform(arenaMouseY, [-1, 1], [10, -10]), { stiffness: 160, damping: 24 });
+  const midParallaxX = useSpring(useTransform(arenaMouseX, [-1, 1], [-18, 18]), { stiffness: 180, damping: 22 });
+  const midParallaxY = useSpring(useTransform(arenaMouseY, [-1, 1], [-12, 12]), { stiffness: 180, damping: 22 });
 
-  // Trigger floating reaction animation
+  const handleArenaPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+    const ny = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+    arenaMouseX.set(nx);
+    arenaMouseY.set(ny);
+  };
+
+  const handleArenaPointerLeave = () => {
+    arenaMouseX.set(0);
+    arenaMouseY.set(0);
+  };
+
   const triggerReaction = (emoji: string) => {
-    const id = Date.now() + Math.random();
-    const x = Math.floor(Math.random() * 60) + 20; // 20% to 80%
+    reactionCounterRef.current += 1;
+    const id = reactionCounterRef.current;
+    const x = 22 + ((id * 17) % 56);
     setFloatingReactions((prev) => [...prev, { id, emoji, x }]);
     setTimeout(() => {
       setFloatingReactions((prev) => prev.filter((r) => r.id !== id));
@@ -90,16 +119,22 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newChatMessage.trim()) return;
-    setChatMessages((prev) => [
+    const trimmed = newChatMessage.trim();
+    if (!trimmed) return;
+    reactionCounterRef.current += 1;
+    const msgId = `user-chat-${reactionCounterRef.current}`;
+    setUserChatByMatch((prev) => ({
       ...prev,
-      {
-        id: Date.now().toString(),
-        user: 'You (VIP Streamer)',
-        text: newChatMessage,
-        time: match.minute || 'LIVE',
-      },
-    ]);
+      [match.id]: [
+        ...(prev[match.id] || []),
+        {
+          id: msgId,
+          user: 'You',
+          text: trimmed,
+          time: match.minute || 'LIVE',
+        },
+      ],
+    }));
     setNewChatMessage('');
     triggerReaction('⚽');
   };
@@ -139,7 +174,9 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 rounded bg-[#18202e] px-2 py-0.5 text-xs text-[#8b94a5]">
             <Eye className="h-3.5 w-3.5 text-[#00ff88]" />
-            <span className="font-mono text-white font-bold">{match.viewers || '1.8M'}</span>
+            <span className="font-mono text-white font-bold">
+              {match.viewers || (match.status === 'LIVE' ? 'LIVE TELEMETRY' : match.kickoffTime)}
+            </span>
           </span>
           <span className="rounded border border-[#00ff88]/40 bg-[#00ff88]/10 px-2 py-0.5 text-[11px] font-black text-[#00ff88]">
             {selectedQuality}
@@ -151,12 +188,17 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 min-h-[480px] xl:min-h-[540px]">
         {/* Left: Video Player Arena Canvas */}
         <div
+          onPointerMove={handleArenaPointerMove}
+          onPointerLeave={handleArenaPointerLeave}
           className={`relative flex flex-col justify-between bg-gradient-to-b from-[#0a0c12] via-[#0d1017] to-[#08090d] overflow-hidden ${
             showMatchDrawer ? 'lg:col-span-8 xl:col-span-8' : 'lg:col-span-12'
           }`}
         >
-          {/* Animated Pitch Atmosphere Simulation */}
-          <div className="absolute inset-0 pointer-events-none opacity-40">
+          {/* Animated Pitch Atmosphere Simulation (Deep Parallax Layer) */}
+          <motion.div
+            style={{ x: bgParallaxX, y: bgParallaxY }}
+            className="absolute inset-0 pointer-events-none opacity-40"
+          >
             {/* Tactical Grid / Field Lines */}
             <div className="absolute inset-x-8 inset-y-12 border border-white/10 rounded-2xl">
               <div className="absolute inset-y-0 left-1/2 w-[1px] bg-white/10" />
@@ -169,45 +211,59 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
             <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-[#00ff88]/10 blur-3xl" />
             <div className="absolute -top-32 right-1/4 h-80 w-80 rounded-full bg-[#0099ff]/10 blur-3xl" />
             <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 h-64 w-96 rounded-full bg-[#00ff88]/5 blur-3xl" />
-          </div>
+          </motion.div>
 
-          {/* Floating animated tactical player dots & soccer ball */}
-          <div className="absolute inset-0 pointer-events-none">
-            {/* Tactical Ball Movement */}
+          {/* Dynamic tactical player dots & soccer ball derived from active match */}
+          <motion.div
+            style={{ x: midParallaxX, y: midParallaxY }}
+            className="absolute inset-0 pointer-events-none"
+          >
             <div className="absolute top-[48%] left-[46%] animate-pitch-ball">
               <div className="h-4 w-4 rounded-full bg-white shadow-[0_0_12px_#00ff88] flex items-center justify-center text-[8px]">
                 ⚽
               </div>
             </div>
 
-            {/* Home Player Nodes (White/Gold) */}
-            <div className="absolute top-[35%] left-[30%] flex items-center gap-1 opacity-80">
-              <div className="h-3 w-3 rounded-full bg-white border border-[#febe10] shadow-[0_0_8px_white]" />
-              <span className="text-[10px] text-white/70 font-mono">Bellingham</span>
-            </div>
-            <div className="absolute top-[60%] left-[24%] flex items-center gap-1 opacity-80">
-              <div className="h-3 w-3 rounded-full bg-white border border-[#febe10]" />
-              <span className="text-[10px] text-white/70 font-mono">Vinícius Jr</span>
-            </div>
-            <div className="absolute top-[50%] left-[16%] flex items-center gap-1 opacity-80">
-              <div className="h-3 w-3 rounded-full bg-white border border-[#febe10]" />
-              <span className="text-[10px] text-white/70 font-mono">Valverde</span>
-            </div>
+            {[
+              { top: '35%', left: '28%' },
+              { top: '58%', left: '22%' },
+              { top: '48%', left: '14%' },
+            ].map((pos, idx) => {
+              const p = match.lineup?.home?.startingXI?.[idx + 7] || match.lineup?.home?.startingXI?.[idx];
+              return (
+                <div
+                  key={`h-dot-${idx}`}
+                  style={{ top: pos.top, left: pos.left }}
+                  className="absolute flex items-center gap-1 opacity-85"
+                >
+                  <div className="h-3 w-3 rounded-full bg-[#00ff88] border border-white shadow-[0_0_8px_#00ff88]" />
+                  <span className="text-[10px] text-white/80 font-mono">
+                    {p ? p.name.split(' ').slice(-1)[0] : `${match.homeTeam.code} ${idx + 1}`}
+                  </span>
+                </div>
+              );
+            })}
 
-            {/* Away Player Nodes (Sky Blue) */}
-            <div className="absolute top-[40%] right-[32%] flex items-center gap-1 opacity-80">
-              <div className="h-3 w-3 rounded-full bg-[#6cabdd] border border-white shadow-[0_0_8px_#6cabdd]" />
-              <span className="text-[10px] text-sky-200 font-mono">De Bruyne</span>
-            </div>
-            <div className="absolute top-[55%] right-[22%] flex items-center gap-1 opacity-80">
-              <div className="h-3 w-3 rounded-full bg-[#6cabdd] border border-white" />
-              <span className="text-[10px] text-sky-200 font-mono">Haaland</span>
-            </div>
-            <div className="absolute top-[30%] right-[18%] flex items-center gap-1 opacity-80">
-              <div className="h-3 w-3 rounded-full bg-[#6cabdd] border border-white" />
-              <span className="text-[10px] text-sky-200 font-mono">Foden</span>
-            </div>
-          </div>
+            {[
+              { top: '38%', right: '28%' },
+              { top: '56%', right: '20%' },
+              { top: '30%', right: '15%' },
+            ].map((pos, idx) => {
+              const p = match.lineup?.away?.startingXI?.[idx + 7] || match.lineup?.away?.startingXI?.[idx];
+              return (
+                <div
+                  key={`a-dot-${idx}`}
+                  style={{ top: pos.top, right: pos.right }}
+                  className="absolute flex items-center gap-1 opacity-85"
+                >
+                  <div className="h-3 w-3 rounded-full bg-[#38bdf8] border border-white shadow-[0_0_8px_#38bdf8]" />
+                  <span className="text-[10px] text-sky-200 font-mono">
+                    {p ? p.name.split(' ').slice(-1)[0] : `${match.awayTeam.code} ${idx + 1}`}
+                  </span>
+                </div>
+              );
+            })}
+          </motion.div>
 
           {/* Floating Live Reaction Emojis */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -583,10 +639,10 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
             {/* Tabs Selector with Framer Motion Sliding Pill */}
             <div className="flex items-center border-b border-[#1f2434] bg-[#0e111a] p-1.5 gap-1">
               {[
-                { id: 'stats', label: 'Live Stats', icon: Activity },
-                { id: 'lineups', label: 'Tactics & Pitch', icon: Users },
-                { id: 'events', label: 'Timeline', icon: Layers },
-                { id: 'chat', label: 'Fan Live Chat', icon: MessageSquare },
+                { id: 'stats' as const, label: 'Live Stats', icon: Activity },
+                { id: 'lineups' as const, label: 'Tactics & Pitch', icon: Users },
+                { id: 'events' as const, label: 'Timeline', icon: Layers },
+                { id: 'chat' as const, label: 'Fan Live Chat', icon: MessageSquare },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -595,7 +651,7 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                     key={tab.id}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => setActiveTab(tab.id)}
                     className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all ${
                       isActive ? 'text-[#00ff88]' : 'text-[#8b94a5] hover:text-white'
                     }`}
@@ -734,17 +790,19 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
 
                 {/* Comparative Live Stat Rows with Animated Dual-Sided Bars */}
                 <div className="space-y-3 pt-1">
-                  {[
-                    { label: 'Total Shots', home: match.stats.shots[0], away: match.stats.shots[1] },
-                    { label: 'Shots on Target', home: match.stats.shotsOnTarget[0], away: match.stats.shotsOnTarget[1] },
-                    { label: 'Total Passes', home: match.stats.passes[0], away: match.stats.passes[1] },
-                    { label: 'Pass Accuracy', home: `${match.stats.passAccuracy[0]}%`, away: `${match.stats.passAccuracy[1]}%`, homeVal: match.stats.passAccuracy[0], awayVal: match.stats.passAccuracy[1] },
-                    { label: 'Corner Kicks', home: match.stats.corners[0], away: match.stats.corners[1] },
-                    { label: 'Fouls Committed', home: match.stats.fouls[0], away: match.stats.fouls[1] },
-                    { label: 'Yellow Cards', home: match.stats.yellowCards[0], away: match.stats.yellowCards[1] },
-                  ].map((stat, idx) => {
-                    const hVal = typeof stat.home === 'number' ? stat.home : (stat as any).homeVal || 50;
-                    const aVal = typeof stat.away === 'number' ? stat.away : (stat as any).awayVal || 50;
+                  {(
+                    [
+                      { label: 'Total Shots', home: match.stats.shots[0], away: match.stats.shots[1] },
+                      { label: 'Shots on Target', home: match.stats.shotsOnTarget[0], away: match.stats.shotsOnTarget[1] },
+                      { label: 'Total Passes', home: match.stats.passes[0], away: match.stats.passes[1] },
+                      { label: 'Pass Accuracy', home: `${match.stats.passAccuracy[0]}%`, away: `${match.stats.passAccuracy[1]}%`, homeVal: match.stats.passAccuracy[0], awayVal: match.stats.passAccuracy[1] },
+                      { label: 'Corner Kicks', home: match.stats.corners[0], away: match.stats.corners[1] },
+                      { label: 'Fouls Committed', home: match.stats.fouls[0], away: match.stats.fouls[1] },
+                      { label: 'Yellow Cards', home: match.stats.yellowCards[0], away: match.stats.yellowCards[1] },
+                    ] as Array<{ label: string; home: number | string; away: number | string; homeVal?: number; awayVal?: number }>
+                  ).map((stat, idx) => {
+                    const hVal = typeof stat.home === 'number' ? stat.home : (stat.homeVal ?? 50);
+                    const aVal = typeof stat.away === 'number' ? stat.away : (stat.awayVal ?? 50);
                     const total = hVal + aVal || 1;
                     const hPct = (hVal / total) * 100;
 
@@ -939,23 +997,29 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
             {activeTab === 'chat' && (
               <div className="flex-1 flex flex-col justify-between p-3 h-[460px]">
                 <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar">
-                  <AnimatePresence>
-                    {chatMessages.map((msg) => (
-                      <motion.div
-                        key={msg.id}
-                        initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ duration: 0.2 }}
-                        className="rounded-lg bg-[#141824] p-2 border border-[#1f2638]"
-                      >
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-[#00ff88]">{msg.user}</span>
-                          <span className="text-[10px] text-[#647188] font-mono">{msg.time}</span>
-                        </div>
-                        <p className="text-xs text-[#f3f4f6] mt-0.5 leading-snug">{msg.text}</p>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
+                  {chatMessages.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-[#8b94a5]">
+                      No live match events yet for {match.homeTeam.shortName} vs {match.awayTeam.shortName}. Share the first fan reaction below!
+                    </div>
+                  ) : (
+                    <AnimatePresence>
+                      {chatMessages.map((msg) => (
+                        <motion.div
+                          key={msg.id}
+                          initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ duration: 0.2 }}
+                          className="rounded-lg bg-[#141824] p-2 border border-[#1f2638]"
+                        >
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-[#00ff88]">{msg.user}</span>
+                            <span className="text-[10px] text-[#647188] font-mono">{msg.time}</span>
+                          </div>
+                          <p className="text-xs text-[#f3f4f6] mt-0.5 leading-snug">{msg.text}</p>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  )}
                 </div>
 
                 <form onSubmit={handleSendChat} className="mt-3 flex gap-2">
@@ -963,7 +1027,7 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                     type="text"
                     value={newChatMessage}
                     onChange={(e) => setNewChatMessage(e.target.value)}
-                    placeholder="Join 2.4M football fans in chat..."
+                    placeholder={`Comment on ${match.homeTeam.shortName} vs ${match.awayTeam.shortName}...`}
                     className="flex-1 rounded-lg border border-[#232838] bg-[#141722] px-3 py-1.5 text-xs text-white placeholder-[#606a7e] outline-none focus:border-[#00ff88] focus:shadow-[0_0_10px_rgba(0,255,136,0.15)] transition-all"
                   />
                   <motion.button

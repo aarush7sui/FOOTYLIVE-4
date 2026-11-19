@@ -1,15 +1,12 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   GitBranch,
-  Trophy,
   ChevronLeft,
   ChevronRight,
-  Flame,
   Award,
-  Calendar,
   AlertCircle,
   RefreshCw,
   MapPin,
@@ -18,25 +15,21 @@ import { BracketRound } from '../../types/football';
 import { TeamLogo } from '../common/TeamLogo';
 import { TiltCard } from '../worldcup/TiltCard';
 
-interface BracketViewerProps {
-  onSelectTournamentId?: (id: string) => void;
-}
-
-export const BracketViewer: React.FC<BracketViewerProps> = () => {
+export const BracketViewer: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [selectedTournament, setSelectedTournament] = useState<'worldcup' | 'ucl' | 'euro' | 'copa'>('worldcup');
+  const [selectedTournament, setSelectedTournament] = useState<'worldcup' | 'ucl' | 'europa' | 'libertadores'>('worldcup');
   const [rounds, setRounds] = useState<BracketRound[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const tournamentOptions = [
-    { id: 'worldcup', name: 'FIFA World Cup 2026', icon: '🌍', badge: 'COMPLETED' },
-    { id: 'ucl', name: 'Champions League', icon: '⭐', badge: 'OFFICIAL' },
-    { id: 'euro', name: 'UEFA EURO 2024', icon: '🇪🇺', badge: 'OFFICIAL' },
-    { id: 'copa', name: 'Copa América', icon: '🏆', badge: 'OFFICIAL' },
+    { id: 'worldcup' as const, name: 'FIFA World Cup 2026', icon: '🌍' },
+    { id: 'ucl' as const, name: 'Champions League', icon: '⭐' },
+    { id: 'europa' as const, name: 'Europa League', icon: '🇪🇺' },
+    { id: 'libertadores' as const, name: 'Copa Libertadores', icon: '🏆' },
   ];
 
-  const fetchBracket = async (tId: string) => {
+  const fetchBracket = useCallback(async (tId: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -48,17 +41,20 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
       } else {
         throw new Error(data.error || 'Failed to load tournament bracket');
       }
-    } catch (err: any) {
-      setError(err.message || 'Knockout telemetry feed unreachable');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Knockout telemetry feed unreachable');
       setRounds([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchBracket(selectedTournament);
-  }, [selectedTournament]);
+    const t = setTimeout(() => {
+      void fetchBracket(selectedTournament);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [selectedTournament, fetchBracket]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -77,20 +73,19 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
           </div>
           <div>
             <h2 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
-              OFFICIAL TOURNAMENT KNOCKOUT BRACKET
+              OFFICIAL TOURNAMENT BRACKET &amp; STAGES
               <span className="rounded-full bg-[#1c2233] px-2.5 py-0.5 text-[10px] font-bold text-[#00ff88] font-mono border border-[#00ff88]/30">
-                VERIFIED REAL RESULTS
+                ESPN LIVE TELEMETRY
               </span>
             </h2>
             <p className="text-xs text-[#8b94a5]">
-              Real-world knockout tournament progression with verified match scores, aggregate legs, penalties, and venues
+              Real-time competition stages, knockout scores, penalties, and official stadium venues
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Tournament Toggle Pills with Framer Motion Sliding Pill */}
-          <div className="flex items-center gap-1 rounded-xl border border-[#232838] bg-[#141722] p-1">
+          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-[#232838] bg-[#141722] p-1">
             {tournamentOptions.map((t) => {
               const isSelected = selectedTournament === t.id;
               return (
@@ -98,7 +93,7 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
                   key={t.id}
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => setSelectedTournament(t.id as any)}
+                  onClick={() => setSelectedTournament(t.id)}
                   className="relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all"
                 >
                   {isSelected && (
@@ -156,11 +151,18 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
           <AlertCircle className="h-6 w-6 text-red-400 mx-auto mb-2" />
           <p className="text-xs text-red-300 font-mono mb-3">{error}</p>
           <button
-            onClick={() => fetchBracket(selectedTournament)}
+            onClick={() => void fetchBracket(selectedTournament)}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-xs text-red-300 font-bold transition-colors"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Reconnect Bracket Feed
           </button>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && !error && rounds.length === 0 && (
+        <div className="rounded-2xl border border-[#232838] bg-[#12151e] p-6 text-center text-xs text-[#8b94a5]">
+          No active or completed matches currently returned for this tournament round.
         </div>
       )}
 
@@ -177,7 +179,6 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
               className="flex min-w-[320px] max-w-[340px] flex-col space-y-3"
               style={{ scrollSnapAlign: 'start' }}
             >
-              {/* Round Header */}
               <div className="flex items-center justify-between border-b border-[#232838] pb-2.5">
                 <div className="flex items-center gap-2">
                   <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[#1e2333] text-[10px] font-bold text-[#00ff88] font-mono border border-[#00ff88]/30">
@@ -192,7 +193,6 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
                 </span>
               </div>
 
-              {/* Match Cards with 3D Tilt Parallax */}
               <div className="flex flex-1 flex-col justify-around gap-3">
                 {round.matches.map((match) => (
                   <TiltCard
@@ -200,9 +200,8 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
                     maxTilt={6}
                     className="border border-[#232838] bg-[#12151e] p-3.5 shadow-xl hover:border-[#00ff88]/50"
                   >
-                    {/* Header: Date, Venue & Status */}
                     <div className="flex items-center justify-between text-[10px] font-mono text-[#8b94a5] mb-2.5 border-b border-[#1c2233] pb-2">
-                      <span className="truncate max-w-[190px] flex items-center gap-1">
+                      <span className="truncate max-w-[185px] flex items-center gap-1">
                         <MapPin className="h-2.5 w-2.5 text-[#00ff88]" />
                         {match.venue || match.date}
                       </span>
@@ -212,15 +211,16 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
                             ? 'bg-[#00ff88]/20 text-[#00ff88] border border-[#00ff88]/50 shadow-[0_0_8px_rgba(0,255,136,0.3)]'
                             : match.status === 'COMPLETED'
                             ? 'bg-[#1c2233] text-[#8b94a5]'
-                            : 'bg-red-500/20 text-red-400 animate-pulse'
+                            : match.status === 'LIVE'
+                            ? 'bg-red-500/20 text-red-400 animate-pulse'
+                            : 'bg-[#1a2236] text-[#00ff88]'
                         }`}
                       >
-                        {match.notes?.includes('CHAMPIONS') ? 'CHAMPIONS 🏆' : match.notes || match.status}
+                        {match.notes?.includes('CHAMPIONS') ? 'CHAMPIONS 🏆' : match.status === 'LIVE' && match.minute ? match.minute : match.status}
                       </span>
                     </div>
 
                     <div className="space-y-2">
-                      {/* Team 1 */}
                       <div
                         className={`flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors ${
                           match.team1.isWinner
@@ -247,7 +247,6 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
                         </div>
                       </div>
 
-                      {/* Team 2 */}
                       <div
                         className={`flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors ${
                           match.team2.isWinner
@@ -275,9 +274,12 @@ export const BracketViewer: React.FC<BracketViewerProps> = () => {
                       </div>
                     </div>
 
-                    {match.notes && !match.notes.includes('CHAMPIONS') && (
-                      <div className="mt-2 pt-1.5 border-t border-[#1a2030] text-[10px] font-mono text-[#00ff88] text-right">
-                        {match.notes}
+                    {match.date && (
+                      <div className="mt-2 pt-1.5 border-t border-[#1a2030] flex items-center justify-between text-[10px] font-mono text-[#8b94a5]">
+                        <span>{match.date}</span>
+                        {match.notes && !match.notes.includes('CHAMPIONS') && (
+                          <span className="text-[#00ff88]">{match.notes}</span>
+                        )}
                       </div>
                     )}
                   </TiltCard>

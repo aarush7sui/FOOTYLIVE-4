@@ -18,6 +18,9 @@ import {
   Tv2,
   Sliders,
   Settings,
+  Gamepad2,
+  MessageSquare,
+  Box,
 } from 'lucide-react';
 import { Tournament } from '../../types/football';
 
@@ -30,6 +33,7 @@ interface SidebarProps {
   selectedLeagueId?: string;
   tournaments: Tournament[];
   onOpenAllTournaments: () => void;
+  onOpenChat?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -41,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedLeagueId,
   tournaments,
   onOpenAllTournaments,
+  onOpenChat,
 }) => {
   const navItems = [
     { id: 'discover', label: 'Discover & Stream', icon: Home },
@@ -167,6 +172,65 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
           <div className="space-y-1">
+            {/* 3D Tactical Stadium Explorer Link */}
+            <Link
+              href="/tactical-3d"
+              className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs border border-[#00ff88]/40 bg-[#00ff88]/10 text-[#00ff88] hover:bg-[#00ff88] hover:text-black transition-all ${
+                isCollapsed ? 'justify-center' : ''
+              }`}
+              title="Open 3D Tactical Stadium Explorer"
+            >
+              <Box className="h-4 w-4 shrink-0" />
+              {!isCollapsed && (
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="font-bold">3D Tactical Stadium</span>
+                  <span className="rounded bg-[#00ff88] px-1.5 py-0.2 text-[9px] font-black text-black">
+                    3D VIEW
+                  </span>
+                </div>
+              )}
+            </Link>
+
+            {/* 3D Penalty Arena Game Link */}
+            <Link
+              href="/penalty-arena"
+              className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs border border-[#0055FF]/40 bg-[#0055FF]/15 text-[#7ab1ff] hover:bg-[#0055FF] hover:text-white transition-all ${
+                isCollapsed ? 'justify-center' : ''
+              }`}
+              title="Play 3D Penalty Arena"
+            >
+              <Gamepad2 className="h-4 w-4 shrink-0" />
+              {!isCollapsed && (
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="font-bold">3D Penalty Arena</span>
+                  <span className="rounded bg-[#0055FF] px-1.5 py-0.2 text-[9px] font-black text-white">
+                    3D GAME
+                  </span>
+                </div>
+              )}
+            </Link>
+
+            {/* FOOTYBot AI Trigger */}
+            {onOpenChat && (
+              <button
+                onClick={onOpenChat}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs border border-[#2c3652] bg-[#141926] text-[#d6deeb] hover:border-[#00ff88]/50 hover:text-[#00ff88] transition-all ${
+                  isCollapsed ? 'justify-center' : ''
+                }`}
+                title="Ask FOOTYBot (Football-Only AI)"
+              >
+                <MessageSquare className="h-4 w-4 shrink-0 text-[#00ff88]" />
+                {!isCollapsed && (
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="font-bold">FOOTYBot AI</span>
+                    <span className="rounded bg-[#232b42] px-1.5 py-0.2 text-[9px] font-bold text-[#00ff88]">
+                      FOOTBALL
+                    </span>
+                  </div>
+                )}
+              </button>
+            )}
+
             {/* World Cup 2026 Daylight Experience Button */}
             <button
               onClick={() => {

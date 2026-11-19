@@ -20,6 +20,7 @@ import {
   Medal,
 } from 'lucide-react';
 import { TiltCard } from './TiltCard';
+import { ParallaxMouseLayer } from '../common/ParallaxItem';
 
 const HOST_VENUES = [
   {
@@ -30,7 +31,7 @@ const HOST_VENUES = [
     flag: '🇺🇸',
     capacity: '82,500',
     role: 'Grand Final Stadium',
-    matches: '8 Matches Hosted (Argentina 1 - 0 Colombia Final on July 19)',
+    matches: '8 Matches Hosted (Spain 1 - 0 Argentina AET Final on July 19)',
     image: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80',
     highlight: 'FINAL VENUE',
   },
@@ -54,7 +55,7 @@ const HOST_VENUES = [
     flag: '🇺🇸',
     capacity: '70,240',
     role: 'Quarter-Final Host',
-    matches: '8 Matches Hosted (Argentina 2 - 1 Netherlands QF)',
+    matches: '8 Matches Hosted (West Coast Knockout Hub)',
     image: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=800&q=80',
     highlight: 'USA HUB',
   },
@@ -66,7 +67,7 @@ const HOST_VENUES = [
     flag: '🇺🇸',
     capacity: '92,000',
     role: 'Semi-Final Host',
-    matches: '9 Matches Hosted (Argentina 2 - 0 France Semi-Final)',
+    matches: '9 Matches Hosted (Spain vs Portugal R16 & Semi-Final)',
     image: 'https://images.unsplash.com/photo-1518091043644-c1d4457512c6?auto=format&fit=crop&w=800&q=80',
     highlight: 'SEMI-FINAL',
   },
@@ -78,7 +79,7 @@ const HOST_VENUES = [
     flag: '🇺🇸',
     capacity: '64,767',
     role: 'Bronze Final Host',
-    matches: '7 Matches Hosted (France 3 - 2 England 3rd Place Playoff)',
+    matches: '7 Matches Hosted (England 6 - 4 France 3rd Place Playoff)',
     image: 'https://images.unsplash.com/photo-1560272564-c83b66b1ad12?auto=format&fit=crop&w=800&q=80',
     highlight: 'BRONZE FINAL',
   },
@@ -128,13 +129,13 @@ const GROUPS_DATA = [
     ],
   },
   {
-    group: 'Group D',
-    host: 'Miami / Atlanta',
+    group: 'Knockout Stars',
+    host: 'New York / Dallas',
     teams: [
-      { name: 'Argentina', flag: '🇦🇷', seed: 'Champion 🏆', star: 'Lionel Messi', pts: 9 },
-      { name: 'Colombia', flag: '🇨🇴', seed: 'Finalist 🥈', star: 'Luis Díaz', pts: 6 },
-      { name: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', seed: 'Semi-Finalist', star: 'Jude Bellingham', pts: 3 },
-      { name: 'Australia', flag: '🇦🇺', seed: 'Eliminated', star: 'Nestory Irankunda', pts: 0 },
+      { name: 'Spain', flag: '🇪🇸', seed: 'Champion 🏆', star: 'Lamine Yamal', pts: 9 },
+      { name: 'Argentina', flag: '🇦🇷', seed: 'Finalist 🥈', star: 'Lionel Messi', pts: 9 },
+      { name: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', seed: '3rd Place 🥉', star: 'Jude Bellingham', pts: 6 },
+      { name: 'France', flag: '🇫🇷', seed: 'Semi-Finalist', star: 'Kylian Mbappé', pts: 6 },
     ],
   },
 ];
@@ -176,8 +177,18 @@ export const WorldCupSection: React.FC = () => {
 
       {/* Top Banner: Day Mode */}
       <div className="relative px-6 py-12 sm:px-12 sm:py-16 overflow-hidden bg-gradient-to-br from-[#FFFFFF] via-[#F0F4F8] to-[#E2E8F0]">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-[#0055FF]/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#FF3D00]/10 rounded-full blur-3xl pointer-events-none" />
+        <ParallaxMouseLayer
+          depth={28}
+          className="absolute top-0 right-0 w-96 h-96 bg-[#0055FF]/12 rounded-full blur-3xl pointer-events-none"
+        >
+          <div className="h-full w-full" />
+        </ParallaxMouseLayer>
+        <ParallaxMouseLayer
+          depth={-22}
+          className="absolute bottom-0 left-0 w-80 h-80 bg-[#FF3D00]/12 rounded-full blur-3xl pointer-events-none"
+        >
+          <div className="h-full w-full" />
+        </ParallaxMouseLayer>
 
         <div className="relative z-10 max-w-4xl space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full bg-[#0055FF]/10 border border-[#0055FF]/20 px-3.5 py-1 text-xs font-black tracking-wider text-[#0055FF] font-mono">
@@ -191,7 +202,7 @@ export const WorldCupSection: React.FC = () => {
 
           <p className="text-sm sm:text-base text-[#475569] max-w-2xl font-medium">
             104 matches across 16 world-class stadiums in the United States, Mexico, and Canada.
-            Argentina defeated Colombia 1-0 in the Grand Final at MetLife Stadium to win back-to-back FIFA World Cups.
+            Spain defeated Argentina 1-0 after extra time in the Grand Final at MetLife Stadium on July 19, 2026.
           </p>
 
           <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -209,11 +220,11 @@ export const WorldCupSection: React.FC = () => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => showToast('Argentina Champion Replay loaded into 4K player')}
+              onClick={() => showToast('Spain 1-0 Argentina AET Final Archive selected')}
               className="inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-white px-5 py-3 text-sm font-bold text-[#334155] shadow-sm hover:border-[#0055FF] hover:text-[#0055FF] transition-all"
             >
               <Medal className="h-4 w-4 text-[#FF3D00]" />
-              Watch Grand Final 4K Highlights
+              Grand Final Archive (Spain 1-0 Argentina)
             </motion.button>
           </div>
         </div>
@@ -224,50 +235,47 @@ export const WorldCupSection: React.FC = () => {
             <div className="flex items-center gap-2">
               <Award className="h-5 w-5 text-[#FF3D00]" />
               <span className="text-xs font-black uppercase tracking-wider text-[#0F172A] font-mono">
-                FIFA WORLD CUP 2026 PODIUM & HONORS
+                FIFA WORLD CUP 2026 PODIUM &amp; HONORS
               </span>
             </div>
             <span className="rounded-full bg-[#0055FF]/10 text-[#0055FF] px-2.5 py-0.5 text-[10px] font-mono font-bold">
-              METLIFE STADIUM • 82,500 FANS
+              METLIFE STADIUM • JULY 19, 2026
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* 1st Place */}
-            <div className="rounded-xl border-2 border-[#FFD700] bg-gradient-to-b from-yellow-50 to-white p-4 text-center shadow-sm">
+            <TiltCard maxTilt={8} className="rounded-xl border-2 border-[#FFD700] bg-gradient-to-b from-yellow-50 to-white p-4 text-center shadow-sm">
               <span className="text-2xl">🥇</span>
               <div className="font-mono text-[10px] font-black uppercase text-amber-600 mt-1">CHAMPIONS</div>
+              <div className="text-lg font-black text-[#0F172A] flex items-center justify-center gap-1.5 mt-0.5">
+                <span>🇪🇸</span> Spain
+              </div>
+              <div className="text-[11px] text-[#475569] font-medium mt-1">
+                Final: 1 - 0 vs Argentina (AET)
+              </div>
+            </TiltCard>
+
+            <TiltCard maxTilt={8} className="rounded-xl border border-[#C0C0C0] bg-gradient-to-b from-slate-50 to-white p-4 text-center shadow-sm">
+              <span className="text-2xl">🥈</span>
+              <div className="font-mono text-[10px] font-black uppercase text-slate-500 mt-1">RUNNERS-UP</div>
               <div className="text-lg font-black text-[#0F172A] flex items-center justify-center gap-1.5 mt-0.5">
                 <span>🇦🇷</span> Argentina
               </div>
               <div className="text-[11px] text-[#475569] font-medium mt-1">
-                Final: 1 - 0 vs Colombia
+                Silver Medalists
               </div>
-            </div>
+            </TiltCard>
 
-            {/* 2nd Place */}
-            <div className="rounded-xl border border-[#C0C0C0] bg-gradient-to-b from-slate-50 to-white p-4 text-center shadow-sm">
-              <span className="text-2xl">🥈</span>
-              <div className="font-mono text-[10px] font-black uppercase text-slate-500 mt-1">RUNNERS-UP</div>
-              <div className="text-lg font-black text-[#0F172A] flex items-center justify-center gap-1.5 mt-0.5">
-                <span>🇨🇴</span> Colombia
-              </div>
-              <div className="text-[11px] text-[#475569] font-medium mt-1">
-                Historic Silver Medal
-              </div>
-            </div>
-
-            {/* 3rd Place */}
-            <div className="rounded-xl border border-[#CD7F32] bg-gradient-to-b from-orange-50 to-white p-4 text-center shadow-sm">
+            <TiltCard maxTilt={8} className="rounded-xl border border-[#CD7F32] bg-gradient-to-b from-orange-50 to-white p-4 text-center shadow-sm">
               <span className="text-2xl">🥉</span>
               <div className="font-mono text-[10px] font-black uppercase text-orange-600 mt-1">THIRD PLACE</div>
               <div className="text-lg font-black text-[#0F172A] flex items-center justify-center gap-1.5 mt-0.5">
-                <span>🇫🇷</span> France
+                <span>🏴󠁧󠁢󠁥󠁮󠁧󠁿</span> England
               </div>
               <div className="text-[11px] text-[#475569] font-medium mt-1">
-                Bronze: 3 - 2 vs England
+                Bronze: 6 - 4 vs France
               </div>
-            </div>
+            </TiltCard>
           </div>
         </div>
       </div>

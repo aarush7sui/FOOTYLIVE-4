@@ -1,25 +1,250 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Match, MatchEvent } from '../types/football';
+import { Match, MatchEvent, MatchOdds } from '../types/football';
 
-// Helper to parse clock string like "74'", "74:12", "HT", "LIVE" into seconds
 function parseClockToSeconds(clockStr?: string): number {
-  if (!clockStr) return 45 * 60;
+  if (!clockStr) return 0;
   if (clockStr.includes(':')) {
     const [min, sec] = clockStr.split(':').map((v) => parseInt(v, 10));
-    return (isNaN(min) ? 45 : min) * 60 + (isNaN(sec) ? 0 : sec);
+    return (isNaN(min) ? 0 : min) * 60 + (isNaN(sec) ? 0 : sec);
   }
   const clean = clockStr.replace(/[^0-9]/g, '');
   const min = parseInt(clean, 10);
-  return isNaN(min) ? 55 * 60 : min * 60;
+  return isNaN(min) ? 0 : min * 60;
 }
 
-// Format seconds into MM:SS
 function formatSecondsToClock(totalSeconds: number): string {
   const min = Math.floor(totalSeconds / 60);
   const sec = totalSeconds % 60;
   return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+function americanToDecimal(val?: string | number): number | null {
+  if (val === undefined || val === null) return null;
+  const parsed = typeof val === 'number' ? val : parseInt(String(val).replace(/[^0-9+-]/g, ''), 10);
+  if (isNaN(parsed) || parsed === 0) return null;
+  return parsed > 0
+    ? Number((1 + parsed / 100).toFixed(2))
+    : Number((1 + 100 / Math.abs(parsed)).toFixed(2));
+}
+
+interface RawEspnEvent {
+  id: string;
+  date?: string;
+  season?: { slug?: string };
+  league?: { name?: string; slug?: string };
+  competitions?: Array<{
+    attendance?: number;
+    type?: { text?: string };
+    notes?: Array<{ headline?: string }>;
+    venue?: { fullName?: string; address?: { city?: string; country?: string } };
+    broadcasts?: Array<{ names?: string[] }>;
+    odds?: Array<{
+      moneyline?: {
+        home?: { close?: { odds?: string }; open?: { odds?: string } };
+        away?: { close?: { odds?: string }; open?: { odds?: string } };
+        draw?: { close?: { odds?: string }; open?: { odds?: string } };
+      };
+      drawOdds?: { moneyLine?: number };
+    }>;
+    details?: Array<{
+      type?: { text?: string };
+      clock?: { displayValue?: string };
+      team?: { id?: string };
+      athletesInvolved?: Array<{ displayName?: string }>;
+    }>;
+    status?: {
+      displayClock?: string;
+      type?: { state?: string; name?: string; shortDetail?: string };
+    };
+    competitors?: Array<{
+      homeAway?: string;
+      score?: string;
+      statistics?: Array<{ name?: string; displayValue?: string }>;
+      team?: {
+        id?: string;
+        displayName?: string;
+        shortDisplayName?: string;
+        abbreviation?: string;
+        color?: string;
+        alternateColor?: string;
+        logo?: string;
+        location?: string;
+      };
+    }>;
+  }>;
+}
+
+function transformDirectEspn(event: RawEspnEvent): Match | null {
+  try {
+    const competition = event.competitions?.[0];
+    if (!competition) return null;
+    const comps = competition.competitors || [];
+    const homeComp = comps.find((c) => c.homeAway === 'home') || comps[0];
+    const awayComp = comps.find((c) => c.homeAway === 'away') || comps[1];
+    if (!homeComp || !awayComp) return null;
+
+    const state = competition.status?.type?.state || 'pre';
+    let status: Match['status'] = 'UPCOMING';
+    let clockSecs = 0;
+    let minute = competition.status?.type?.shortDetail || 'Scheduled';
+
+    if (state === 'in') {
+      status = 'LIVE';
+      const display = competition.status?.displayClock || '0:00';
+      clockSecs = parseClockToSeconds(display);
+      minute = formatSecondsToClock(clockSecs);
+      if (competition.status?.type?.name === 'STATUS_HALFTIME') {
+        status = 'HT';
+        minute = 'HT';
+      }
+    } else if (state === 'post') {
+      status = 'FINISHED';
+      minute = competition.status?.type?.shortDetail || 'FT';
+    }
+
+    const homeScore = parseInt(homeComp.score || '0', 10) || 0;
+    const awayScore = parseInt(awayComp.score || '0', 10) || 0;
+
+    const getStat = (name: string, fallback: [number, number]): [number, number] => {
+      const h = homeComp.statistics?.find((s) => s.name === name)?.displayValue;
+      const a = awayComp.statistics?.find((s) => s.name === name)?.displayValue;
+      if (h !== undefined && a !== undefined) {
+        const valH = parseFloat(h.replace('%', ''));
+        const valA = parseFloat(a.replace('%', ''));
+        if (!isNaN(valH) && !isNaN(valA)) return [valH, valA];
+      }
+      return fallback;
+    };
+
+    const possession = getStat('possessionPct', [50, 50]);
+    const shots = getStat('totalShots', getStat('shotsTotal', [0, 0]));
+    const shotsOnTarget = getStat('shotsOnTarget', [0, 0]);
+    const corners = getStat('wonCorners', getStat('corners', [0, 0]));
+    const fouls = getStat('foulsCommitted', [0, 0]);
+    const yellowCards = getStat('yellowCards', [0, 0]);
+    const passes = getStat('totalPasses', [0, 0]);
+    const passAccuracy = getStat('passPct', [0, 0]);
+
+    const parsedEvents: MatchEvent[] = [];
+    (competition.details || []).forEach((d, idx) => {
+      const txt = (d.type?.text || '').toLowerCase();
+      const isGoal = txt.includes('goal') || txt.includes('penalty - scored');
+      const isYellow = txt.includes('yellow');
+      const isRed = txt.includes('red');
+      if (!isGoal && !isYellow && !isRed) return;
+      const teamSide: 'home' | 'away' =
+        homeComp.team?.id && d.team?.id === homeComp.team.id ? 'home' : 'away';
+      parsedEvents.push({
+        id: `espn-direct-${idx}`,
+        type: isGoal ? 'goal' : isRed ? 'red_card' : 'yellow_card',
+        minute: parseInt((d.clock?.displayValue || '0').replace(/[^0-9]/g, ''), 10) || 0,
+        player:
+          d.athletesInvolved?.[0]?.displayName ||
+          (teamSide === 'home'
+            ? homeComp.team?.shortDisplayName || 'Home'
+            : awayComp.team?.shortDisplayName || 'Away'),
+        team: teamSide,
+        detail: d.type?.text || 'Match Event',
+      });
+    });
+
+    let odds: MatchOdds | undefined;
+    const rawOdds = competition.odds?.[0];
+    if (rawOdds?.moneyline) {
+      const h = americanToDecimal(rawOdds.moneyline.home?.close?.odds ?? rawOdds.moneyline.home?.open?.odds);
+      const d = americanToDecimal(
+        rawOdds.moneyline.draw?.close?.odds ?? rawOdds.moneyline.draw?.open?.odds ?? rawOdds.drawOdds?.moneyLine
+      );
+      const a = americanToDecimal(rawOdds.moneyline.away?.close?.odds ?? rawOdds.moneyline.away?.open?.odds);
+      if (h && d && a) odds = { home: h, draw: d, away: a };
+    }
+
+    const eventDate = event.date ? new Date(event.date) : new Date();
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const kickoffDate =
+      eventDate.toDateString() === today.toDateString()
+        ? 'Today'
+        : eventDate.toDateString() === tomorrow.toDateString()
+        ? 'Tomorrow'
+        : eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    const broadcastNames = (competition.broadcasts || []).flatMap((b) => b.names || []).filter(Boolean);
+    const attendance =
+      typeof competition.attendance === 'number' && competition.attendance > 0
+        ? competition.attendance
+        : undefined;
+
+    return {
+      id: event.id,
+      tournament: event.league?.name || competition.notes?.[0]?.headline || event.season?.slug || 'World Football',
+      stage: competition.type?.text || (status === 'LIVE' ? 'Live In-Play' : 'Official Fixture'),
+      homeTeam: {
+        name: homeComp.team?.displayName || 'Home Team',
+        shortName: homeComp.team?.shortDisplayName || homeComp.team?.abbreviation || 'HOM',
+        code: homeComp.team?.abbreviation || 'HOM',
+        color: '#' + (homeComp.team?.color || 'ffffff'),
+        accentColor: '#' + (homeComp.team?.alternateColor || '0055ff'),
+        logo: homeComp.team?.logo || '⚽',
+        country: homeComp.team?.location || 'Global',
+      },
+      awayTeam: {
+        name: awayComp.team?.displayName || 'Away Team',
+        shortName: awayComp.team?.shortDisplayName || awayComp.team?.abbreviation || 'AWY',
+        code: awayComp.team?.abbreviation || 'AWY',
+        color: '#' + (awayComp.team?.color || '00ff88'),
+        accentColor: '#' + (awayComp.team?.alternateColor || '111420'),
+        logo: awayComp.team?.logo || '⚽',
+        country: awayComp.team?.location || 'Global',
+      },
+      score: { home: homeScore, away: awayScore },
+      minute,
+      liveClockSeconds: status === 'LIVE' ? clockSecs : undefined,
+      status,
+      kickoffTime:
+        eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) +
+        ' GMT',
+      kickoffDate,
+      kickoffIso: event.date || eventDate.toISOString(),
+      leagueSlug: event.league?.slug,
+      stadium: competition.venue?.fullName || 'TBD Venue',
+      city: competition.venue?.address?.city || 'TBD',
+      attendance,
+      viewers: attendance ? `${attendance.toLocaleString()} Stadium Attendance` : undefined,
+      streamQuality: '4K HDR',
+      channels: broadcastNames.length > 0 ? broadcastNames : ['Official Broadcast Feed'],
+      cameraAngles: [
+        { name: 'Tactical Cam 1', description: 'Wide broadcast tactical flow' },
+        { name: 'Director Cut 4K', description: 'Main broadcast production feed' },
+        { name: 'Goal Line Cam', description: 'High frame-rate pitch replay' },
+      ],
+      commentaryTracks: [
+        { language: 'English (Live)', commentator: 'World Feed Commentary' },
+        { language: 'Stadium Atmos', commentator: 'Clean Pitch Audio' },
+      ],
+      events: parsedEvents,
+      stats: {
+        possession,
+        shots,
+        shotsOnTarget,
+        xG: [
+          Number((shotsOnTarget[0] * 0.28 + homeScore * 0.35).toFixed(2)),
+          Number((shotsOnTarget[1] * 0.28 + awayScore * 0.35).toFixed(2)),
+        ],
+        corners,
+        fouls,
+        yellowCards,
+        passes,
+        passAccuracy,
+      },
+      odds,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function useLiveMatches() {
@@ -28,136 +253,17 @@ export function useLiveMatches() {
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>('Syncing live telemetry...');
-  const [source, setSource] = useState<string>('Live Satellite Stream');
-  const [secondsUntilNextSync, setSecondsUntilNextSync] = useState<number>(5);
+  const [source, setSource] = useState<string>('ESPN Live Global Telemetry');
+  const [secondsUntilNextSync, setSecondsUntilNextSync] = useState<number>(15);
   const [liveSecondTick, setLiveSecondTick] = useState<number>(0);
 
-  const syncCountdownRef = useRef<number>(5);
-
-  // Client-side parser for direct ESPN scoreboard in browser
-  const transformDirectEspn = (event: any): Match | null => {
-    try {
-      const competition = event.competitions?.[0];
-      if (!competition) return null;
-      const comps = competition.competitors || [];
-      const homeComp = comps.find((c: any) => c.homeAway === 'home') || comps[0];
-      const awayComp = comps.find((c: any) => c.homeAway === 'away') || comps[1];
-      if (!homeComp || !awayComp) return null;
-
-      const state = competition.status?.type?.state || 'pre';
-      let status: 'LIVE' | 'UPCOMING' | 'FINISHED' | 'HT' = 'UPCOMING';
-      let clockSecs = 0;
-      let minute = 'Upcoming';
-
-      if (state === 'in') {
-        status = 'LIVE';
-        const display = competition.status?.displayClock || '45:00';
-        clockSecs = parseClockToSeconds(display);
-        minute = formatSecondsToClock(clockSecs);
-        if (competition.status?.type?.name === 'STATUS_HALFTIME') {
-          status = 'HT';
-          minute = 'HT';
-        }
-      } else if (state === 'post') {
-        status = 'FINISHED';
-        minute = 'FT';
-      }
-
-      const homeScore = parseInt(homeComp.score || '0', 10);
-      const awayScore = parseInt(awayComp.score || '0', 10);
-
-      const homePoss = Math.min(70, Math.max(30, 52 + (homeScore - awayScore) * 4));
-      const awayPoss = 100 - homePoss;
-
-      return {
-        id: event.id,
-        tournament: event.season?.slug || competition.notes?.[0]?.headline || 'Global Football Championship',
-        stage: competition.type?.text || (status === 'LIVE' ? 'Live In-Play' : 'Official Fixture'),
-        homeTeam: {
-          name: homeComp.team?.displayName || 'Home Team',
-          shortName: homeComp.team?.shortDisplayName || homeComp.team?.abbreviation || 'HOM',
-          code: homeComp.team?.abbreviation || 'HOM',
-          color: '#' + (homeComp.team?.color || 'ffffff'),
-          accentColor: '#' + (homeComp.team?.alternateColor || '0055ff'),
-          logo: homeComp.team?.logo || '⚽',
-          country: homeComp.team?.location || 'Global',
-        },
-        awayTeam: {
-          name: awayComp.team?.displayName || 'Away Team',
-          shortName: awayComp.team?.shortDisplayName || awayComp.team?.abbreviation || 'AWY',
-          code: awayComp.team?.abbreviation || 'AWY',
-          color: '#' + (awayComp.team?.color || '00ff88'),
-          accentColor: '#' + (awayComp.team?.alternateColor || '111420'),
-          logo: awayComp.team?.logo || '⚽',
-          country: awayComp.team?.location || 'Global',
-        },
-        score: { home: isNaN(homeScore) ? 0 : homeScore, away: isNaN(awayScore) ? 0 : awayScore },
-        minute,
-        liveClockSeconds: status === 'LIVE' ? clockSecs : undefined,
-        status,
-        kickoffTime: new Date(event.date || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        kickoffDate: 'Today',
-        stadium: competition.venue?.fullName || 'International Stadium',
-        city: competition.venue?.address?.city || 'Global',
-        viewers: status === 'LIVE' ? `${(Math.random() * 1.5 + 1.2).toFixed(1)}M Watching` : undefined,
-        streamQuality: '4K HDR',
-        channels: ['FOOTYLive Main 4K', 'Direct Satellite Feed'],
-        cameraAngles: [
-          { name: 'Tactical Cam 1', description: 'Wide broadcast tactical flow' },
-          { name: 'Director Cut 4K', description: 'Main broadcast production feed' },
-          { name: 'Goal Line Cam', description: 'High frame-rate pitch replay' },
-        ],
-        commentaryTracks: [
-          { language: 'English (Live)', commentator: 'World Feed Commentary' },
-          { language: 'Spanish (Live)', commentator: 'Relato en Vivo' },
-        ],
-        events: [
-          ...(homeScore > 0 ? [{ id: 'gh1', type: 'goal' as const, minute: 34, player: `${homeComp.team?.shortDisplayName || 'Home'} Striker`, team: 'home' as const, detail: 'Goal ⚽' }] : []),
-          ...(awayScore > 0 ? [{ id: 'ga1', type: 'goal' as const, minute: 58, player: `${awayComp.team?.shortDisplayName || 'Away'} Winger`, team: 'away' as const, detail: 'Goal ⚽' }] : []),
-        ],
-        stats: {
-          possession: [homePoss, awayPoss],
-          shots: [Math.max(homeScore * 3 + 6, 10), Math.max(awayScore * 3 + 5, 8)],
-          shotsOnTarget: [Math.max(homeScore + 2, 4), Math.max(awayScore + 2, 3)],
-          xG: [parseFloat((homeScore * 0.75 + 0.35).toFixed(2)), parseFloat((awayScore * 0.75 + 0.25).toFixed(2))],
-          corners: [6, 4],
-          fouls: [9, 11],
-          yellowCards: [1, 2],
-          passes: [Math.round(homePoss * 9.2), Math.round(awayPoss * 9.2)],
-          passAccuracy: [87, 84],
-        },
-        lineup: {
-          home: {
-            formation: '4-3-3',
-            startingXI: [
-              { number: 1, name: 'Starting Keeper', position: 'GK', rating: 7.5 },
-              { number: 4, name: 'Defensive Anchor', position: 'CB', rating: 7.8 },
-              { number: 10, name: 'Creative Mid', position: 'CAM', rating: 8.4 },
-              { number: 9, name: 'Centre Forward', position: 'ST', rating: 8.6 },
-            ],
-          },
-          away: {
-            formation: '4-2-3-1',
-            startingXI: [
-              { number: 1, name: 'Starting Keeper', position: 'GK', rating: 7.3 },
-              { number: 5, name: 'Centre Back', position: 'CB', rating: 7.4 },
-              { number: 7, name: 'Right Winger', position: 'RW', rating: 8.0 },
-              { number: 9, name: 'Striker', position: 'ST', rating: 8.1 },
-            ],
-          },
-        },
-        odds: { home: 2.1, draw: 3.2, away: 3.4 },
-      };
-    } catch {
-      return null;
-    }
-  };
+  const syncCountdownRef = useRef<number>(15);
+  const hasMatchesRef = useRef<boolean>(false);
 
   const fetchLiveMatches = useCallback(async () => {
     try {
-      // Strategy 1: Fetch from internal Next.js live API route
       let fetchedMatches: Match[] = [];
-      let feedSource = 'Live Satellite Global Telemetry';
+      let feedSource = 'ESPN Live Satellite Global Telemetry';
       let fetchError: string | null = null;
 
       try {
@@ -173,21 +279,20 @@ export function useLiveMatches() {
         } else {
           fetchError = `Internal API route status: ${res.status}`;
         }
-      } catch (err: any) {
-        fetchError = err.message || 'API Route unreachable';
+      } catch (err: unknown) {
+        fetchError = err instanceof Error ? err.message : 'API Route unreachable';
       }
 
-      // Strategy 2: If internal route failed or returned empty, attempt direct browser ESPN client fetch
       if (fetchedMatches.length === 0) {
         try {
           const directRes = await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard', {
             cache: 'no-store',
           });
           if (directRes.ok) {
-            const espnData = await directRes.json();
+            const espnData = (await directRes.json()) as { events?: RawEspnEvent[] };
             const parsed = (espnData.events || [])
               .map(transformDirectEspn)
-              .filter(Boolean) as Match[];
+              .filter((m): m is Match => m !== null);
 
             if (parsed.length > 0) {
               fetchedMatches = parsed;
@@ -195,17 +300,18 @@ export function useLiveMatches() {
               fetchError = null;
             }
           }
-        } catch (err: any) {
-          // Direct fetch also blocked
+        } catch {
+          // Direct fetch unavailable
         }
       }
 
       if (fetchedMatches.length > 0) {
-        setMatches((prev) => {
-          return fetchedMatches.map((newM) => {
+        hasMatchesRef.current = true;
+        setMatches((prev) =>
+          fetchedMatches.map((newM) => {
             const oldM = prev.find((p) => p.id === newM.id);
             if (newM.status === 'LIVE') {
-              const currentSecs = oldM?.liveClockSeconds || parseClockToSeconds(newM.minute);
+              const currentSecs = oldM?.liveClockSeconds ?? parseClockToSeconds(newM.minute);
               return {
                 ...newM,
                 liveClockSeconds: currentSecs,
@@ -213,77 +319,68 @@ export function useLiveMatches() {
               };
             }
             return newM;
-          });
-        });
+          })
+        );
 
         setIsLiveConnected(true);
         setError(null);
         setSource(feedSource);
-        const now = new Date();
         setLastSyncTime(
-          now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          })
         );
       } else {
-        // No matches found from live endpoints
-        if (matches.length === 0) {
-          setError(fetchError || 'No live matches available from sports telemetry feed right now.');
+        if (!hasMatchesRef.current) {
+          setError(fetchError || 'No live or scheduled matches returned from ESPN telemetry right now.');
         }
         setIsLiveConnected(false);
       }
-    } catch (err: any) {
-      console.warn('Live scores telemetry exception:', err);
-      setError(err.message || 'Error connecting to live sports API.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error connecting to live sports API.');
       setIsLiveConnected(false);
     } finally {
       setIsLoading(false);
-      syncCountdownRef.current = 5;
-      setSecondsUntilNextSync(5);
+      syncCountdownRef.current = 15;
+      setSecondsUntilNextSync(15);
     }
-  }, [matches.length]);
+  }, []);
 
-  // 1-SECOND TICK ENGINE: Runs every 1000ms
   useEffect(() => {
-    fetchLiveMatches();
+    const initTimer = setTimeout(() => {
+      void fetchLiveMatches();
+    }, 0);
 
     const secondInterval = setInterval(() => {
       setLiveSecondTick((t) => t + 1);
 
-      // Decrement sync countdown
       syncCountdownRef.current -= 1;
       if (syncCountdownRef.current <= 0) {
-        syncCountdownRef.current = 5;
-        fetchLiveMatches();
+        syncCountdownRef.current = 15;
+        void fetchLiveMatches();
       }
       setSecondsUntilNextSync(syncCountdownRef.current);
 
-      // Advance clock and live stats for every LIVE match
       setMatches((prevMatches) => {
         if (prevMatches.length === 0) return prevMatches;
-
         return prevMatches.map((match) => {
           if (match.status !== 'LIVE') return match;
-
           const currentSeconds = (match.liveClockSeconds || parseClockToSeconds(match.minute)) + 1;
-          const updatedMinute = formatSecondsToClock(currentSeconds);
-
-          // Dynamic momentum wave shift
-          const currentMomentum = match.momentum || [35, 45, 55, 20, 60, 40, 75, -20, 80, 65];
-          const shiftedMomentum = [
-            ...currentMomentum.slice(1),
-            Math.round(Math.sin(currentSeconds * 0.2) * 50 + (match.score.home - match.score.away) * 15),
-          ];
-
           return {
             ...match,
             liveClockSeconds: currentSeconds,
-            minute: updatedMinute,
-            momentum: shiftedMomentum,
+            minute: formatSecondsToClock(currentSeconds),
           };
         });
       });
     }, 1000);
 
-    return () => clearInterval(secondInterval);
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(secondInterval);
+    };
   }, [fetchLiveMatches]);
 
   return {
@@ -294,7 +391,7 @@ export function useLiveMatches() {
     lastSyncTime,
     source,
     refreshLiveScores: fetchLiveMatches,
-    liveCount: matches.filter((m) => m.status === 'LIVE').length,
+    liveCount: matches.filter((m) => m.status === 'LIVE' || m.status === 'HT').length,
     totalCount: matches.length,
     secondsUntilNextSync,
     liveSecondTick,

@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   RefreshCw,
   Radio,
+  Gamepad2,
+  MessageSquare,
+  Box,
 } from 'lucide-react';
 import { Tournament, Match } from '../../types/football';
 import { TeamLogo } from '../common/TeamLogo';
@@ -32,6 +35,7 @@ interface NavbarProps {
   onRefreshLive?: () => void;
   liveCount?: number;
   secondsUntilNextSync?: number;
+  onOpenChat?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,6 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefreshLive,
   liveCount = 0,
   secondsUntilNextSync = 5,
+  onOpenChat,
 }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('English (Global)');
@@ -237,7 +242,39 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right: Actions, Language & Profile */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* 3D Tactical Stadium Link */}
+          <Link
+            href="/tactical-3d"
+            className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#00ff88]/40 bg-[#00ff88]/10 px-3 py-1.5 text-xs font-bold text-[#00ff88] hover:bg-[#00ff88] hover:text-black transition-all"
+            title="Open 3D Tactical Stadium Explorer"
+          >
+            <Box className="h-3.5 w-3.5" />
+            <span>3D Stadium</span>
+          </Link>
+
+          {/* 3D Penalty Arena Link */}
+          <Link
+            href="/penalty-arena"
+            className="hidden md:flex items-center gap-1.5 rounded-lg border border-[#2c3345] bg-[#161a25] px-3 py-1.5 text-xs font-bold text-[#c0c7d5] hover:border-[#3884ff]/60 hover:text-[#7ab1ff] transition-all"
+            title="Play 3D Penalty Arena"
+          >
+            <Gamepad2 className="h-3.5 w-3.5 text-[#5497ff]" />
+            <span>3D Arena</span>
+          </Link>
+
+          {/* FOOTYBot AI Quick Button */}
+          {onOpenChat && (
+            <button
+              onClick={onOpenChat}
+              className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#2c3345] bg-[#161a25] px-3 py-1.5 text-xs font-bold text-[#f3f4f6] hover:border-[#00ff88]/50 hover:text-[#00ff88] transition-all"
+              title="Ask FOOTYBot (Football-Only AI)"
+            >
+              <MessageSquare className="h-3.5 w-3.5 text-[#00ff88]" />
+              <span>FOOTYBot</span>
+            </button>
+          )}
+
           {/* World Cup 2026 Daylight Experience Scroll Trigger */}
           <motion.button
             whileHover={{ scale: 1.05 }}

@@ -14,6 +14,8 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { Tournament } from '../../types/football';
+import { TiltCard } from '../worldcup/TiltCard';
+import { ParallaxMouseLayer } from '../common/ParallaxItem';
 
 interface TournamentsDirectoryProps {
   tournaments: Tournament[];
@@ -123,8 +125,13 @@ export const TournamentsDirectory: React.FC<TournamentsDirectoryProps> = ({
           </span>
         </div>
 
-        {/* Decorative background glow */}
-        <div className="absolute right-0 top-0 h-64 w-64 rounded-full bg-[#00ff88]/5 blur-3xl pointer-events-none" />
+        {/* Decorative pointer-parallax background glow */}
+        <ParallaxMouseLayer
+          depth={30}
+          className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-[#00ff88]/10 blur-3xl"
+        >
+          <div className="h-full w-full" />
+        </ParallaxMouseLayer>
       </motion.div>
 
       {/* Confederation Filter Pills with Framer Motion */}
@@ -176,76 +183,77 @@ export const TournamentsDirectory: React.FC<TournamentsDirectoryProps> = ({
                 delay: Math.min(idx * 0.03, 0.3),
                 ease: 'easeOut',
               }}
-              whileHover={{
-                y: -6,
-                scale: 1.02,
-                transition: { duration: 0.2 },
-              }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => onSelectTournament(tournament)}
-              className="group relative flex flex-col justify-between rounded-2xl border border-[#222838] bg-[#121520] p-4 sm:p-5 cursor-pointer hover:border-[#00ff88]/50 hover:bg-[#161a27] shadow-lg hover:shadow-[0_10px_25px_-5px_rgba(0,255,136,0.12)] transition-colors"
+              className="h-full"
             >
-              <div>
-                {/* Card Header: Flag & Confederation Badge */}
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1a2030] text-2xl border border-[#273046] group-hover:border-[#00ff88]/40 transition-colors">
-                      {tournament.flag}
-                    </span>
-                    <div>
-                      <span className="rounded bg-[#1a2030] px-2 py-0.5 text-[10px] font-mono font-bold text-[#00ff88]">
-                        {tournament.confederation}
-                      </span>
-                      <h3 className="text-base font-black text-white group-hover:text-[#00ff88] transition-colors leading-tight mt-1">
-                        {tournament.name}
-                      </h3>
+              <TiltCard
+                maxTilt={6}
+                onClick={() => onSelectTournament(tournament)}
+                className="group h-full border border-[#222838] bg-[#121520] p-4 sm:p-5 hover:border-[#00ff88]/50 hover:bg-[#161a27] shadow-lg hover:shadow-[0_10px_25px_-5px_rgba(0,255,136,0.12)]"
+              >
+                <div className="h-full flex flex-col justify-between">
+                  <div>
+                    {/* Card Header: Flag & Confederation Badge */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1a2030] text-2xl border border-[#273046] group-hover:border-[#00ff88]/40 transition-colors">
+                          {tournament.flag}
+                        </span>
+                        <div>
+                          <span className="rounded bg-[#1a2030] px-2 py-0.5 text-[10px] font-mono font-bold text-[#00ff88]">
+                            {tournament.confederation}
+                          </span>
+                          <h3 className="text-base font-black text-white group-hover:text-[#00ff88] transition-colors leading-tight mt-1">
+                            {tournament.name}
+                          </h3>
+                        </div>
+                      </div>
+
+                      <motion.div
+                        whileHover={{ scale: 1.15, rotate: 5 }}
+                        className="rounded-lg border border-white/10 bg-[#161a26] p-1.5 text-[#8b94a5] group-hover:text-[#00ff88] group-hover:border-[#00ff88]/30 transition-colors"
+                      >
+                        <ArrowUpRight className="h-4 w-4" />
+                      </motion.div>
                     </div>
+
+                    {/* Tournament Meta Info */}
+                    <div className="rounded-xl bg-[#0c0e14] border border-[#1b202d] p-3 space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-[#8b94a5]">Region:</span>
+                        <span className="text-white font-medium">{tournament.region}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[#8b94a5]">Defending Champion:</span>
+                        <span className="text-[#00ff88] font-bold">🏆 {tournament.defendingChampion}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[#8b94a5]">Current Status:</span>
+                        <span className="text-white font-medium">{tournament.currentPhase}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[#8b94a5]">Clubs / Nations:</span>
+                        <span className="text-white font-mono font-bold">{tournament.teamsCount} Teams</span>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-xs text-[#8b94a5] line-clamp-2 leading-relaxed">
+                      {tournament.description}
+                    </p>
                   </div>
 
-                  <motion.div
-                    whileHover={{ scale: 1.15, rotate: 5 }}
-                    className="rounded-lg border border-white/10 bg-[#161a26] p-1.5 text-[#8b94a5] group-hover:text-[#00ff88] group-hover:border-[#00ff88]/30 transition-colors"
-                  >
-                    <ArrowUpRight className="h-4 w-4" />
-                  </motion.div>
+                  {/* Card Action Footer */}
+                  <div className="mt-4 pt-3 border-t border-[#1a1f2c] flex items-center justify-between">
+                    <span className="text-[11px] text-[#00ff88] font-semibold flex items-center gap-1">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Live 4K Broadcast
+                    </span>
+
+                    <span className="text-xs font-bold text-white group-hover:text-[#00ff88] flex items-center gap-1 transition-colors">
+                      View Standings &amp; Fixtures <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+                    </span>
+                  </div>
                 </div>
-
-                {/* Tournament Meta Info */}
-                <div className="rounded-xl bg-[#0c0e14] border border-[#1b202d] p-3 space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-[#8b94a5]">Region:</span>
-                    <span className="text-white font-medium">{tournament.region}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8b94a5]">Defending Champion:</span>
-                    <span className="text-[#00ff88] font-bold">🏆 {tournament.defendingChampion}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8b94a5]">Current Status:</span>
-                    <span className="text-white font-medium">{tournament.currentPhase}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8b94a5]">Clubs / Nations:</span>
-                    <span className="text-white font-mono font-bold">{tournament.teamsCount} Teams</span>
-                  </div>
-                </div>
-
-                <p className="mt-3 text-xs text-[#8b94a5] line-clamp-2 leading-relaxed">
-                  {tournament.description}
-                </p>
-              </div>
-
-              {/* Card Action Footer */}
-              <div className="mt-4 pt-3 border-t border-[#1a1f2c] flex items-center justify-between">
-                <span className="text-[11px] text-[#00ff88] font-semibold flex items-center gap-1">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Live 4K Broadcast
-                </span>
-
-                <span className="text-xs font-bold text-white group-hover:text-[#00ff88] flex items-center gap-1 transition-colors">
-                  View Standings & Fixtures <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
-                </span>
-              </div>
+              </TiltCard>
             </motion.div>
           ))}
         </AnimatePresence>

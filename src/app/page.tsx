@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sidebar } from '../components/layout/Sidebar';
 import { Navbar } from '../components/layout/Navbar';
 import { LiveScoreTicker } from '../components/layout/LiveScoreTicker';
 import { HeroVideoPlayer } from '../components/player/HeroVideoPlayer';
+import { InteractiveMatchHub } from '../components/match/InteractiveMatchHub';
 import { LiveMatchesCarousel } from '../components/carousels/LiveMatchesCarousel';
 import { UpcomingCarousel } from '../components/carousels/UpcomingCarousel';
 import { BracketViewer } from '../components/bracket/BracketViewer';
@@ -16,24 +17,24 @@ import { TournamentDetailModal } from '../components/tournaments/TournamentDetai
 import { PageLoadCurtain } from '../components/splash/PageLoadCurtain';
 import { ParticleBurstContainer } from '../components/worldcup/ParticleBurst';
 import { WorldCupSection } from '../components/worldcup/WorldCupSection';
-import { ParallaxItem, FloatingBackgroundGlows } from '../components/common/ParallaxItem';
+import {
+  ParallaxItem,
+  ParallaxScrollProgress,
+  FloatingBackgroundGlows,
+} from '../components/common/ParallaxItem';
 import { useLiveMatches } from '../hooks/useLiveMatches';
+import { useMatchReminders } from '../hooks/useMatchReminders';
 import { MatchCardSkeleton, HeroPlayerSkeleton } from '../components/common/LoadingSkeletons';
+import { FootballChatbot, FootballChatbotHandle } from '../components/chat/FootballChatbot';
 import { Match, Tournament, HighlightItem } from '../types/football';
 import {
-  Trophy,
+  BellRing,
+  X,
   Radio,
-  Calendar,
-  Sparkles,
-  ArrowRight,
-  Shield,
   Zap,
   Globe2,
   Tv,
   RotateCcw,
-  Wifi,
-  Activity,
-  CheckCircle2,
   RefreshCw,
   AlertTriangle,
 } from 'lucide-react';
@@ -58,15 +59,44 @@ export default function FootyLiveApp() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [splashReplayCount, setSplashReplayCount] = useState<number>(0);
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const chatbotRef = useRef<FootballChatbotHandle>(null);
 
-  // Active streaming match loaded in Hero Video Player
-  const [activeMatch, setActiveMatch] = useState<Match | null>(null);
+  const liveMatchesRef = useRef<Match[]>([]);
+  useEffect(() => {
+    liveMatchesRef.current = liveMatches;
+  }, [liveMatches]);
+
+  // Selected match id (derived against latest liveMatches so scores & clock always stay synced)
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const activeMatch =
+    (selectedMatchId ? liveMatches.find((m) => m.id === selectedMatchId) : undefined) ||
+    liveMatches.find((m) => m.status === 'LIVE') ||
+    liveMatches[0] ||
+    null;
 
   // Selected tournament for detail modal view
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
 
   // Filter by league shortcut from sidebar
   const [selectedLeagueShortcut, setSelectedLeagueShortcut] = useState<string | undefined>(undefined);
+
+  const {
+    reminders,
+    permission,
+    nowMs,
+    activeKickoffAlert,
+    requestNotificationPermission,
+    toggleReminder,
+    armTestReminder,
+    dismissKickoffAlert,
+  } = useMatchReminders((matchId) => {
+    const found = liveMatchesRef.current.find((m) => m.id === matchId);
+    if (found) {
+      setSelectedMatchId(found.id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
 
   // Fetch worldwide tournaments from live API route
   useEffect(() => {
@@ -86,28 +116,12 @@ export default function FootyLiveApp() {
         setIsLoadingTournaments(false);
       }
     }
-    fetchTournaments();
+    void fetchTournaments();
   }, []);
-
-  // Sync active match with live match feed
-  useEffect(() => {
-    if (liveMatches && liveMatches.length > 0) {
-      setActiveMatch((prev) => {
-        if (!prev) {
-          const firstLive = liveMatches.find((m) => m.status === 'LIVE');
-          return firstLive || liveMatches[0];
-        }
-        const updated = liveMatches.find((m) => m.id === prev.id);
-        if (updated) return updated;
-        const firstLive = liveMatches.find((m) => m.status === 'LIVE');
-        return firstLive || liveMatches[0];
-      });
-    }
-  }, [liveMatches]);
 
   // Handle match selection: load immediately into Hero Player and scroll to top
   const handleSelectMatch = (match: Match) => {
-    setActiveMatch(match);
+    setSelectedMatchId(match.id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -160,14 +174,17 @@ export default function FootyLiveApp() {
         highlight.tournament.toLowerCase().includes(m.tournament.toLowerCase())
     );
     if (relatedMatch) {
-      setActiveMatch(relatedMatch);
+      setSelectedMatchId(relatedMatch.id);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   return (
     <div className="flex min-h-screen bg-[#0d0e12] text-[#f3f4f6] relative overflow-x-hidden">
-      {/* Dynamic Parallax Floating Background Glows */}
+      {/* Top Scroll Depth Progress Bar */}
+      <ParallaxScrollProgress />
+
+      {/* Dynamic Parallax Floating Background Glows (Scroll + Pointer Reactive) */}
       <FloatingBackgroundGlows />
 
       {/* 1) PAGE-LOAD CURTAIN (splash) - Plays on first load & re-triggerable */}
@@ -175,6 +192,68 @@ export default function FootyLiveApp() {
 
       {/* Particle Burst System on any user click */}
       <ParticleBurstContainer />
+
+      {/* Live Kickoff Notification Toast Banner (paired with Browser Notification API) */}
+      <AnimatePresence>
+        {activeKickoffAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -24, scale: 0.96 }}
+            className="fixed top-5 right-5 z-50 w-[calc(100vw-2.5rem)] sm:w-[370px] rounded-2xl border border-[#00ff88]/60 bg-[#101622]/95 p-4 shadow-[0_18px_48px_rgba(0,255,136,0.28)] backdrop-blur-xl"
+            role="status"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#00ff88]/20 border border-[#00ff88]/50 text-[#00ff88]">
+                <BellRing className="h-5 w-5 animate-bounce" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#00ff88] font-mono">
+                    {activeKickoffAlert.isTest ? 'TEST KICKOFF ALERT' : 'MATCH KICKOFF NOW'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={dismissKickoffAlert}
+                    className="rounded p-0.5 text-[#8b94a5] hover:text-white"
+                    aria-label="Dismiss notification"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <p className="text-sm font-black text-white mt-0.5 truncate">
+                  {activeKickoffAlert.homeName} vs {activeKickoffAlert.awayName}
+                </p>
+                <p className="text-[11px] text-[#8b94a5] truncate">
+                  {activeKickoffAlert.tournament} • {activeKickoffAlert.stadium}
+                </p>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const found = liveMatches.find((m) => m.id === activeKickoffAlert.matchId);
+                      if (found) {
+                        handleSelectMatch(found);
+                      }
+                      dismissKickoffAlert();
+                    }}
+                    className="rounded-lg bg-[#00ff88] px-3 py-1 text-xs font-black text-black hover:bg-[#19ff96] transition-colors"
+                  >
+                    Open Match Center
+                  </button>
+                  <button
+                    type="button"
+                    onClick={dismissKickoffAlert}
+                    className="rounded-lg border border-[#283148] px-2.5 py-1 text-xs font-semibold text-[#c0c7d5] hover:text-white"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floating Action Button: Replay Splash */}
       <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 pointer-events-auto">
@@ -190,6 +269,23 @@ export default function FootyLiveApp() {
         </motion.button>
       </div>
 
+      {/* Football-Only Gemini Chatbot with Live Telemetry & Google Search */}
+      <FootballChatbot
+        ref={chatbotRef}
+        isOpen={isChatOpen}
+        onOpenChange={setIsChatOpen}
+        activeMatchLabel={
+          activeMatch
+            ? `${activeMatch.homeTeam.shortName} vs ${activeMatch.awayTeam.shortName}`
+            : undefined
+        }
+        activeMatchContext={
+          activeMatch
+            ? `${activeMatch.tournament}: ${activeMatch.homeTeam.name} ${activeMatch.score.home} - ${activeMatch.score.away} ${activeMatch.awayTeam.name} (${activeMatch.status}, ${activeMatch.minute}, ${activeMatch.kickoffDate} ${activeMatch.kickoffTime}) @ ${activeMatch.stadium}. Possession: ${activeMatch.stats.possession[0]}%-${activeMatch.stats.possession[1]}%, Shots: ${activeMatch.stats.shots[0]}-${activeMatch.stats.shots[1]}.`
+            : undefined
+        }
+      />
+
       {/* Collapsible Sidebar */}
       <Sidebar
         isCollapsed={isSidebarCollapsed}
@@ -200,6 +296,7 @@ export default function FootyLiveApp() {
         selectedLeagueId={selectedLeagueShortcut}
         tournaments={tournaments}
         onOpenAllTournaments={() => tournaments.length > 0 && setSelectedTournament(tournaments[0])}
+        onOpenChat={() => setIsChatOpen(true)}
       />
 
       {/* Main Container */}
@@ -226,6 +323,7 @@ export default function FootyLiveApp() {
           onRefreshLive={refreshLiveScores}
           liveCount={liveCount}
           secondsUntilNextSync={secondsUntilNextSync}
+          onOpenChat={() => setIsChatOpen(true)}
         />
 
         {/* Network latency / error banner if live endpoints are unreachable */}
@@ -250,7 +348,7 @@ export default function FootyLiveApp() {
         {/* Content Body */}
         <main className="flex-1 p-3 sm:p-6 lg:p-8 space-y-12 max-w-[1720px] mx-auto w-full">
           {/* Hero Section: Interactive DAZN Video Player Container with Framer Motion Reveal & Parallax */}
-          <ParallaxItem speed={20}>
+          <ParallaxItem speed={14} scaleOnScroll>
             <motion.section
               id="hero-player"
               initial={{ opacity: 0, y: 25 }}
@@ -309,8 +407,19 @@ export default function FootyLiveApp() {
             </motion.section>
           </ParallaxItem>
 
+          {/* Interactive Matchday Hub: Live Fan Predictor, 1-Click AI Tactical Preview & 3D Experiences */}
+          <ParallaxItem speed={-14} scaleOnScroll>
+            <InteractiveMatchHub
+              activeMatch={activeMatch}
+              onAskTacticalAI={(prompt) => {
+                setIsChatOpen(true);
+                chatbotRef.current?.ask(prompt);
+              }}
+            />
+          </ParallaxItem>
+
           {/* Carousel 1: Filterable 'Live Matches' with Framer Motion & Parallax */}
-          <ParallaxItem speed={25}>
+          <ParallaxItem speed={22}>
             <motion.div
               id="live-matches-section"
               initial={{ opacity: 0, y: 25 }}
@@ -338,7 +447,7 @@ export default function FootyLiveApp() {
           </ParallaxItem>
 
           {/* Carousel 2: Filterable 'Upcoming' Matches with Framer Motion & Parallax */}
-          <ParallaxItem speed={25}>
+          <ParallaxItem speed={-18}>
             <motion.div
               id="upcoming-section"
               initial={{ opacity: 0, y: 25 }}
@@ -349,12 +458,18 @@ export default function FootyLiveApp() {
               <UpcomingCarousel
                 matches={liveMatches}
                 onSelectMatch={handleSelectMatch}
+                reminders={reminders}
+                permission={permission}
+                nowMs={nowMs}
+                onToggleReminder={(match) => void toggleReminder(match)}
+                onArmTestReminder={(match, secs) => void armTestReminder(match, secs)}
+                onRequestPermission={() => void requestNotificationPermission()}
               />
             </motion.div>
           </ParallaxItem>
 
           {/* Carousel 3: Filterable Tournament Knockout 'Bracket' with Real Knockout Data & Parallax */}
-          <ParallaxItem speed={30}>
+          <ParallaxItem speed={26} scaleOnScroll>
             <motion.div
               id="bracket-section"
               initial={{ opacity: 0, y: 25 }}
@@ -367,7 +482,7 @@ export default function FootyLiveApp() {
           </ParallaxItem>
 
           {/* Carousel 4: Filterable 'Highlights' & VODs with Framer Motion & Parallax */}
-          <ParallaxItem speed={25}>
+          <ParallaxItem speed={-16}>
             <motion.div
               id="highlights-section"
               initial={{ opacity: 0, y: 25 }}
@@ -380,12 +495,12 @@ export default function FootyLiveApp() {
           </ParallaxItem>
 
           {/* SINGLE-PAGE INTEGRATED "WORLD CUP 2026" COMPLETED TOURNAMENT SECTION WITH PARALLAX */}
-          <ParallaxItem speed={35}>
+          <ParallaxItem speed={28} scaleOnScroll>
             <WorldCupSection />
           </ParallaxItem>
 
           {/* Option to look through all football tournaments in the world with Parallax */}
-          <ParallaxItem speed={20}>
+          <ParallaxItem speed={-16}>
             <motion.section
               id="world-tournaments-section"
               initial={{ opacity: 0, y: 25 }}
@@ -413,7 +528,7 @@ export default function FootyLiveApp() {
           </ParallaxItem>
 
           {/* Platform Feature Footer Banner */}
-          <ParallaxItem speed={15}>
+          <ParallaxItem speed={14}>
             <motion.section
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
