@@ -295,6 +295,7 @@ export default function FootyLiveApp() {
         onSelectLeague={handleSelectLeague}
         selectedLeagueId={selectedLeagueShortcut}
         tournaments={tournaments}
+        liveCount={liveCount}
         onOpenAllTournaments={() => tournaments.length > 0 && setSelectedTournament(tournaments[0])}
         onOpenChat={() => setIsChatOpen(true)}
       />
@@ -347,7 +348,7 @@ export default function FootyLiveApp() {
 
         {/* Content Body */}
         <main className="flex-1 p-3 sm:p-6 lg:p-8 space-y-12 max-w-[1720px] mx-auto w-full">
-          {/* Hero Section: Interactive DAZN Video Player Container with Framer Motion Reveal & Parallax */}
+          {/* Hero Section: Interactive Video Player Container with Framer Motion Reveal & Parallax */}
           <ParallaxItem speed={14} scaleOnScroll>
             <motion.section
               id="hero-player"
@@ -356,16 +357,19 @@ export default function FootyLiveApp() {
               transition={{ duration: 0.7, ease: 'easeOut' }}
               className="space-y-3"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between rounded-xl border border-[#232838] border-l-2 border-l-[#ff3355] bg-gradient-to-r from-[#ff3355]/10 via-[#121622] to-[#0f1118] px-3.5 py-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="flex h-3 w-3 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00ff88] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#00ff88]"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ff3355] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#ff3355]"></span>
                   </span>
                   <h1 className="text-sm font-black tracking-wider uppercase text-white">
                     MAIN BROADCAST ARENA
                   </h1>
-                  <span className="rounded bg-[#00ff88]/20 px-2 py-0.5 text-[10px] font-black text-[#00ff88] uppercase">
+                  <span className="rounded bg-[#ff3355]/15 border border-[#ff3355]/35 px-2 py-0.5 text-[10px] font-black text-[#ff5c77] uppercase">
+                    LIVE MATCHDAY
+                  </span>
+                  <span className="rounded bg-[#00ff88]/15 px-2 py-0.5 text-[10px] font-black text-[#00ff88] uppercase">
                     4K 60FPS LOW LATENCY
                   </span>
                   {activeMatch && activeMatch.status === 'LIVE' && (
@@ -534,12 +538,12 @@ export default function FootyLiveApp() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5 }}
-              className="rounded-2xl border border-[#23293c] bg-gradient-to-r from-[#111420] via-[#141826] to-[#0f121a] p-6 sm:p-8"
+              className="rounded-2xl border border-[#23293c] border-t-[#ff3355]/40 bg-gradient-to-r from-[#16121c] via-[#141826] to-[#0f121a] p-6 sm:p-8"
             >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#00ff88]/20 border border-[#00ff88]/40">
-                    <Zap className="h-5 w-5 text-[#00ff88]" />
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#ff3355]/15 border border-[#ff3355]/40">
+                    <Zap className="h-5 w-5 text-[#ff3355]" />
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">Ultra-Low Latency Broadcast</h4>
@@ -576,8 +580,8 @@ export default function FootyLiveApp() {
 
               <div className="mt-8 pt-6 border-t border-[#1c2233] flex flex-wrap items-center justify-between gap-4 text-xs text-[#606a7e]">
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-[#00ff88]" />
-                  <span>© 2026 FOOTYLive Streaming Network. DAZN-Grade Football Broadcasting.</span>
+                  <div className="h-2 w-2 rounded-full bg-[#ff3355]" />
+                  <span>© 2026 FOOTYLive Streaming Network. Ultra-Low Latency Football Broadcasting.</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="hover:text-white cursor-pointer">Privacy & DRM</span>

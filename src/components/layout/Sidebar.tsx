@@ -32,6 +32,7 @@ interface SidebarProps {
   onSelectLeague: (leagueId: string) => void;
   selectedLeagueId?: string;
   tournaments: Tournament[];
+  liveCount?: number;
   onOpenAllTournaments: () => void;
   onOpenChat?: () => void;
 }
@@ -44,29 +45,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectLeague,
   selectedLeagueId,
   tournaments,
+  liveCount = 0,
   onOpenAllTournaments,
   onOpenChat,
 }) => {
   const navItems = [
     { id: 'discover', label: 'Discover & Stream', icon: Home },
-    { id: 'live', label: 'Live Now', icon: Radio, badge: '5 LIVE', badgeColor: 'bg-[#ff3355]' },
-    { id: 'tournaments', label: 'All Tournaments', icon: Trophy, badge: 'WORLD', badgeColor: 'bg-[#00ff88]/20 text-[#00ff88]' },
+    {
+      id: 'live',
+      label: 'Live Now',
+      icon: Radio,
+      badge: liveCount > 0 ? `${liveCount} LIVE` : 'ESPN LIVE',
+      badgeColor: liveCount > 0 ? 'bg-[#ff3355] text-white' : 'bg-[#1c2233] text-[#8b94a5]',
+    },
+    {
+      id: 'tournaments',
+      label: 'All Tournaments',
+      icon: Trophy,
+      badge: tournaments.length > 0 ? `${tournaments.length} LEAGUES` : 'WORLD',
+      badgeColor: 'bg-[#00ff88]/20 text-[#00ff88]',
+    },
     { id: 'schedule', label: 'Fixtures & Schedule', icon: CalendarDays },
     { id: 'bracket', label: 'Tournament Brackets', icon: GitBranch },
     { id: 'highlights', label: 'Highlights & VOD', icon: PlaySquare },
     { id: 'favorites', label: 'My Watchlist', icon: Bookmark },
   ];
 
-  const quickLeagues = [
-    { id: 'uefa-champions-league', name: 'Champions League', flag: '⭐' },
-    { id: 'premier-league', name: 'Premier League', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
-    { id: 'la-liga', name: 'La Liga EA Sports', flag: '🇪🇸' },
-    { id: 'serie-a', name: 'Serie A', flag: '🇮🇹' },
-    { id: 'bundesliga', name: 'Bundesliga', flag: '🇩🇪' },
-    { id: 'fifa-world-cup-2026', name: 'World Cup 2026', flag: '🌍' },
-    { id: 'copa-libertadores', name: 'Copa Libertadores', flag: '🏆' },
-    { id: 'saudi-pro-league', name: 'Saudi Pro League', flag: '🇸🇦' },
-  ];
+  const featuredLeagues = tournaments.length > 0
+    ? tournaments.slice(0, 8).map((t) => ({
+        id: t.id,
+        name: t.shortName || t.name,
+        flag: t.flag,
+        live: t.liveFixturesCount || 0,
+        active: t.activeFixturesCount || 0,
+      }))
+    : [
+        { id: 'uefa-champions-league', name: 'Champions League', flag: '⭐', live: 0, active: 0 },
+        { id: 'premier-league', name: 'Premier League', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', live: 0, active: 0 },
+        { id: 'la-liga', name: 'La Liga', flag: '🇪🇸', live: 0, active: 0 },
+        { id: 'serie-a', name: 'Serie A', flag: '🇮🇹', live: 0, active: 0 },
+        { id: 'bundesliga', name: 'Bundesliga', flag: '🇩🇪', live: 0, active: 0 },
+        { id: 'fifa-world-cup-2026', name: 'World Cup 26', flag: '🌍', live: 0, active: 0 },
+        { id: 'copa-libertadores', name: 'Libertadores', flag: '🏆', live: 0, active: 0 },
+        { id: 'saudi-pro-league', name: 'Saudi Pro League', flag: '🇸🇦', live: 0, active: 0 },
+      ];
 
   return (
     <aside
@@ -81,11 +103,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onTabChange('discover')}
             className="flex items-center gap-3 cursor-pointer overflow-hidden"
           >
-            <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#12151e] to-[#1c2233] border border-[#2b3348] shadow-md group">
+            <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#16121b] to-[#1c2233] border border-[#ff3355]/35 shadow-md group">
               <Tv2 className="h-5 w-5 text-[#00ff88] transition-transform group-hover:scale-110" />
               <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00ff88] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#00ff88]"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ff3355] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#ff3355]"></span>
               </span>
             </div>
             {!isCollapsed && (
@@ -93,8 +115,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex items-center tracking-wider font-black text-lg text-white">
                   FOOTY<span className="text-[#00ff88] ml-0.5">LIVE</span>
                 </div>
-                <span className="text-[9px] uppercase tracking-widest text-[#8b94a5] font-semibold -mt-1">
-                  DAZN BROADCAST
+                <span className="text-[9px] uppercase tracking-widest text-[#ff5c77] font-semibold -mt-1">
+                  4K LIVE BROADCAST
                 </span>
               </div>
             )}
@@ -253,7 +275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </button>
 
-            {quickLeagues.map((league) => {
+            {featuredLeagues.map((league) => {
               const isSelected = selectedLeagueId === league.id;
               return (
                 <button
@@ -268,7 +290,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <span className="text-sm">{league.flag}</span>
                   {!isCollapsed && (
-                    <span className="truncate text-left">{league.name}</span>
+                    <div className="flex flex-1 items-center justify-between gap-1.5 min-w-0">
+                      <span className="truncate text-left">{league.name}</span>
+                      {league.live > 0 ? (
+                        <span className="rounded bg-[#ff3355] px-1 py-0.2 text-[9px] font-black text-white font-mono">
+                          {league.live}
+                        </span>
+                      ) : league.active > 0 ? (
+                        <span className="rounded bg-[#1a2233] px-1.5 py-0.2 text-[9px] font-mono text-[#00ff88]">
+                          {league.active}
+                        </span>
+                      ) : null}
+                    </div>
                   )}
                 </button>
               );
@@ -278,24 +311,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom VIP Subscription Pill */}
-      <div className="p-3 border-t border-[#1a1f2c] bg-[#0c0e14]">
+      <div className="p-3 border-t border-[#ff3355]/20 bg-[#0c0e14]">
         {!isCollapsed ? (
-          <div className="rounded-xl border border-[#2b3347] bg-gradient-to-b from-[#141926] to-[#0e111a] p-3 text-left">
+          <div className="rounded-xl border border-[#2b3347] border-t-[#ff3355]/45 bg-gradient-to-b from-[#171420] to-[#0e111a] p-3 text-left">
             <div className="flex items-center justify-between mb-1.5">
               <span className="flex items-center gap-1.5 text-xs font-black text-white">
-                <ShieldCheck className="h-3.5 w-3.5 text-[#00ff88]" />
-                DAZN PRO PASS
+                <ShieldCheck className="h-3.5 w-3.5 text-[#ff3355]" />
+                FOOTYLIVE PRO
               </span>
-              <span className="rounded bg-[#00ff88]/20 px-1.5 py-0.5 text-[9px] font-bold text-[#00ff88]">
-                ACTIVE
+              <span className="rounded bg-[#ff3355]/20 border border-[#ff3355]/40 px-1.5 py-0.5 text-[9px] font-bold text-[#ff5c77]">
+                LIVE PASS
               </span>
             </div>
             <p className="text-[11px] text-[#8b94a5] mb-2 leading-tight">
-              Streaming in 4K HDR 60fps with zero ads & multi-angle camera feeds.
+              Streaming in 4K HDR 60fps with zero ads &amp; multi-angle camera feeds.
             </p>
             <button
               onClick={onOpenAllTournaments}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#00ff88] py-1.5 text-xs font-bold text-black transition-all hover:bg-[#12ff96] shadow-[0_0_12px_rgba(0,255,136,0.3)]"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-[#00ff88] to-[#00e078] py-1.5 text-xs font-bold text-black transition-all hover:brightness-110 shadow-[0_0_12px_rgba(0,255,136,0.25)]"
             >
               <Globe2 className="h-3.5 w-3.5" />
               World Tournaments Hub

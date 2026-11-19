@@ -76,7 +76,10 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
     try {
       setIsLoadingStandings(true);
       setError(null);
-      const res = await fetch(`/api/standings?league=${tournament.id}`);
+      const slugParam = tournament.espnSlug
+        ? `&slug=${encodeURIComponent(tournament.espnSlug)}`
+        : '';
+      const res = await fetch(`/api/standings?league=${encodeURIComponent(tournament.id)}${slugParam}`);
       const data = await res.json();
       if (!res.ok && !data.success) {
         throw new Error(data.error || `Standings telemetry responded with status ${res.status}`);
@@ -127,8 +130,17 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
             </motion.button>
 
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#1c2234] border border-[#2b3348] text-3xl shadow-inner">
-                {tournament.flag}
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#1c2234] border border-[#2b3348] text-3xl shadow-inner overflow-hidden p-2">
+                {tournament.logoUrl ? (
+                  <img
+                    src={tournament.logoUrl}
+                    alt={tournament.name}
+                    className="h-full w-full object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  tournament.flag
+                )}
               </div>
 
               <div className="flex-1 min-w-[200px]">
@@ -228,9 +240,9 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                         </tr>
                       </thead>
                       <tbody>
-                        {liveStandings.map((row) => (
+                        {liveStandings.map((row, idx) => (
                           <tr
-                            key={row.team}
+                            key={`${row.team}-${idx}`}
                             className="border-b border-[#181d2c] hover:bg-[#151926] transition-colors"
                           >
                             <td className="py-2.5 px-3 font-mono font-bold text-[#8b94a5]">
@@ -247,9 +259,16 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                             <td className="py-2.5 px-3">
                               <div className="flex items-center gap-2.5">
                                 <TeamLogo logo={row.logo} name={row.team} className="h-5 w-5" />
-                                <span className="font-bold text-white truncate max-w-[150px] sm:max-w-[200px]">
-                                  {row.team}
-                                </span>
+                                <div className="min-w-0">
+                                  <span className="font-bold text-white truncate block max-w-[150px] sm:max-w-[200px]">
+                                    {row.team}
+                                  </span>
+                                  {row.group && (
+                                    <span className="text-[10px] font-mono text-[#00ff88]/80">
+                                      {row.group}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td className="py-2.5 px-3 text-center font-mono text-[#8b94a5]">{row.played}</td>
@@ -316,9 +335,9 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {fixtures.map((fixture) => (
+                      {fixtures.map((fixture, idx) => (
                         <button
-                          key={fixture.id}
+                          key={`${fixture.id}-${idx}`}
                           type="button"
                           onClick={() => onSelectMatchFixture?.(fixture.homeTeam, fixture.awayTeam)}
                           className="w-full text-left flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-[#161a27] border border-[#202638] hover:border-[#00ff88]/40 transition-colors"
@@ -361,7 +380,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     <div className="space-y-2">
                       {scorers.map((scorer, idx) => (
                         <div
-                          key={`${scorer.name}-${scorer.team}`}
+                          key={`${scorer.name}-${scorer.team}-${idx}`}
                           className="flex items-center justify-between p-3 rounded-lg bg-[#161a27] border border-[#202638]"
                         >
                           <div className="flex items-center gap-3">
@@ -394,9 +413,9 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {attackingClubs.map((club) => (
+                      {attackingClubs.map((club, idx) => (
                         <div
-                          key={club.team}
+                          key={`${club.team}-${idx}`}
                           className="flex items-center justify-between p-3 rounded-lg bg-[#161a27] border border-[#202638]"
                         >
                           <div className="flex items-center gap-3">

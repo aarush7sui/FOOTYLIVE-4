@@ -153,7 +153,7 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
   return (
     <div
       ref={containerRef}
-      className="relative w-full rounded-2xl overflow-hidden border border-[#232a3b] bg-[#0c0e14] shadow-2xl transition-all"
+      className="relative w-full rounded-2xl overflow-hidden border border-[#232a3b] border-t-2 border-t-[#ff3355]/75 bg-[#0c0e14] shadow-[0_20px_60px_rgba(255,51,85,0.08)] transition-all"
     >
       {/* Top Match Info Overlay Ribbon */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1c2233] bg-[#10131d]/90 px-4 py-2.5 backdrop-blur-md">
@@ -209,7 +209,7 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
 
             {/* Stadium Floodlights Glow */}
             <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-[#00ff88]/10 blur-3xl" />
-            <div className="absolute -top-32 right-1/4 h-80 w-80 rounded-full bg-[#0099ff]/10 blur-3xl" />
+            <div className="absolute -top-32 right-1/4 h-80 w-80 rounded-full bg-[#ff3355]/10 blur-3xl" />
             <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 h-64 w-96 rounded-full bg-[#00ff88]/5 blur-3xl" />
           </motion.div>
 
@@ -280,8 +280,8 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
 
           {/* Video Overlay Top Header: Official Scorebug */}
           <div className="relative z-10 p-4 sm:p-6 flex items-start justify-between">
-            {/* High-Impact DAZN Scorebug */}
-            <div className="flex items-center rounded-xl border border-white/10 bg-[#0d1017]/90 p-2 shadow-2xl backdrop-blur-md">
+            {/* High-Impact Live Match Scorebug */}
+            <div className="flex items-center rounded-xl border border-white/10 border-l-2 border-l-[#ff3355]/70 bg-[#0d1017]/90 p-2 shadow-2xl backdrop-blur-md">
               {/* Home Team */}
               <div className="flex items-center gap-2.5 px-3">
                 <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} className="h-7 w-7" />
@@ -434,12 +434,12 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                 <div className="absolute inset-y-0 left-0 w-[82%] rounded-full bg-gradient-to-r from-[#00ff88]/80 to-[#00ff88] shadow-[0_0_8px_rgba(0,255,136,0.5)]" />
 
                 {/* Event Markers on Timeline (Goals / Cards) */}
-                {match.events?.map((ev) => {
+                {match.events?.map((ev, idx) => {
                   const percent = Math.min((ev.minute / 90) * 100, 100);
                   const isGoal = ev.type === 'goal';
                   return (
                     <div
-                      key={ev.id}
+                      key={`${ev.id || 'timeline-ev'}-${idx}`}
                       style={{ left: `${percent}%` }}
                       className="absolute -top-1.5 -translate-x-1/2 flex flex-col items-center group/marker cursor-pointer"
                     >
@@ -694,7 +694,7 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                 <div className="space-y-1.5 rounded-xl border border-[#232a3b] bg-[#141824] p-3">
                   <div className="flex justify-between text-xs font-bold">
                     <motion.span
-                      key={match.stats.possession[0]}
+                      key={`pos-home-${match.stats.possession[0]}`}
                       initial={{ scale: 1.15, color: '#00ff88' }}
                       animate={{ scale: 1, color: '#ffffff' }}
                       className="text-white font-mono"
@@ -705,7 +705,7 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                       Live Possession
                     </span>
                     <motion.span
-                      key={match.stats.possession[1]}
+                      key={`pos-away-${match.stats.possession[1]}`}
                       initial={{ scale: 1.15, color: '#38bdf8' }}
                       animate={{ scale: 1, color: '#ffffff' }}
                       className="text-white font-mono"
@@ -890,9 +890,9 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                             <span className="text-[9px] px-1 py-0.2 bg-[#00ff88]/20 rounded text-[#00ff88]">HOME</span>
                           </div>
                           <div className="space-y-1.5">
-                            {(match.lineup.home?.startingXI || []).map((p) => (
+                            {(match.lineup.home?.startingXI || []).map((p, idx) => (
                               <motion.div
-                                key={p.name}
+                                key={`home-xi-${p.number}-${p.name}-${idx}`}
                                 whileHover={{ x: 3, scale: 1.02 }}
                                 className="flex items-center justify-between text-[11px] text-[#c0c7d5] p-1 rounded bg-[#0d1410] border border-[#16271c]"
                               >
@@ -919,9 +919,9 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                             <span className="text-[9px] px-1 py-0.2 bg-sky-400/20 rounded text-sky-400">AWAY</span>
                           </div>
                           <div className="space-y-1.5">
-                            {(match.lineup.away?.startingXI || []).map((p) => (
+                            {(match.lineup.away?.startingXI || []).map((p, idx) => (
                               <motion.div
-                                key={p.name}
+                                key={`away-xi-${p.number}-${p.name}-${idx}`}
                                 whileHover={{ x: 3, scale: 1.02 }}
                                 className="flex items-center justify-between text-[11px] text-[#c0c7d5] p-1 rounded bg-[#0b131a] border border-[#162430]"
                               >
@@ -963,7 +963,7 @@ export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({ match }) => {
                   <AnimatePresence>
                     {match.events?.map((ev, idx) => (
                       <motion.div
-                        key={ev.id || idx}
+                        key={`log-ev-${ev.id || 'ev'}-${idx}`}
                         initial={{ opacity: 0, x: -15, scale: 0.95 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
                         transition={{ duration: 0.3, delay: idx * 0.05 }}

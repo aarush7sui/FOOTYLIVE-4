@@ -17,16 +17,21 @@ import { TiltCard } from '../worldcup/TiltCard';
 
 export const BracketViewer: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [selectedTournament, setSelectedTournament] = useState<'worldcup' | 'ucl' | 'europa' | 'libertadores'>('worldcup');
+  const [selectedTournament, setSelectedTournament] = useState<string>('worldcup');
   const [rounds, setRounds] = useState<BracketRound[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const tournamentOptions = [
-    { id: 'worldcup' as const, name: 'FIFA World Cup 2026', icon: '🌍' },
-    { id: 'ucl' as const, name: 'Champions League', icon: '⭐' },
-    { id: 'europa' as const, name: 'Europa League', icon: '🇪🇺' },
-    { id: 'libertadores' as const, name: 'Copa Libertadores', icon: '🏆' },
+    { id: 'worldcup', name: 'FIFA World Cup 2026', icon: '🌍' },
+    { id: 'ucl', name: 'Champions League', icon: '⭐' },
+    { id: 'europa', name: 'Europa League', icon: '🟠' },
+    { id: 'conference', name: 'Conference League', icon: '🟢' },
+    { id: 'libertadores', name: 'Libertadores', icon: '🏆' },
+    { id: 'sudamericana', name: 'Sudamericana', icon: '🌎' },
+    { id: 'afc', name: 'AFC Champions', icon: '🌏' },
+    { id: 'concacaf', name: 'Concacaf Cup', icon: '🦅' },
+    { id: 'facup', name: 'FA Cup', icon: '👑' },
   ];
 
   const fetchBracket = useCallback(async (tId: string) => {
@@ -175,7 +180,7 @@ export const BracketViewer: React.FC = () => {
         >
           {rounds.map((round, rIndex) => (
             <div
-              key={round.title}
+              key={`${round.title}-${rIndex}`}
               className="flex min-w-[320px] max-w-[340px] flex-col space-y-3"
               style={{ scrollSnapAlign: 'start' }}
             >
@@ -194,9 +199,9 @@ export const BracketViewer: React.FC = () => {
               </div>
 
               <div className="flex flex-1 flex-col justify-around gap-3">
-                {round.matches.map((match) => (
+                {round.matches.map((match, mIndex) => (
                   <TiltCard
-                    key={match.id}
+                    key={`${match.id}-${mIndex}`}
                     maxTilt={6}
                     className="border border-[#232838] bg-[#12151e] p-3.5 shadow-xl hover:border-[#00ff88]/50"
                   >

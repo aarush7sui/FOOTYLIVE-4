@@ -1,6 +1,6 @@
 # FOOTYLive — Football Streaming Platform & World Cup 2026 Experience
 
-A unified, single-page football platform combining DAZN's broadcast design system (`#0d0e12` dark background, `#00ff88` pitch neon green accents) with the **"World Cup 2026" Daylight Stadium** section (`#F7F9FB` light background, `#0055FF` electric blue primary, `#FF3D00` energetic orange accents). Built with **Next.js 16**, **Tailwind CSS v4**, **TypeScript**, **Lucide Icons**, and **Framer Motion**.
+A unified, single-page football platform combining FOOTYLive's dark matchday broadcast design system (`#0d0e12` dark background, `#00ff88` pitch neon green and `#ff3355` live crimson accents) with the **"World Cup 2026" Daylight Stadium** section (`#F7F9FB` light background, `#0055FF` electric blue primary, `#FF3D00` energetic orange accents). Built with **Next.js 16**, **Tailwind CSS v4**, **TypeScript**, **Lucide Icons**, and **Framer Motion**.
 
 ---
 
@@ -47,7 +47,7 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
   - 16 Host Venues with 3D Tilt interactive cards (`TiltCard.tsx`) filterable by host nation (USA, Mexico, Canada) with capacity specs.
   - 12 Official Groups (Groups A to L) with 48 nations, seeded pots, and key star players.
 
-### 4. 📺 DAZN Dark-Themed Live Broadcast Hub
+### 4. 📺 Dark-Themed Live Broadcast Hub
 - **Top Live-Score Ticker**: Real-time score ticker across top leagues with flashing match minutes, score changes, and click-to-stream functionality.
 - **Hero Video Player Container**:
   - Simulated high-intensity pitch radar animation and stadium floodlights.

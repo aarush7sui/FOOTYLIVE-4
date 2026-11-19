@@ -120,8 +120,13 @@ export const ParallaxScrollProgress: React.FC<{ color?: string }> = ({
   return (
     <motion.div
       aria-hidden="true"
-      style={{ scaleX, transformOrigin: '0% 50%', backgroundColor: color }}
-      className="fixed top-0 left-0 right-0 h-[2.5px] z-50 pointer-events-none shadow-[0_0_12px_rgba(0,255,136,0.7)]"
+      style={{
+        scaleX,
+        transformOrigin: '0% 50%',
+        backgroundImage: color === '#00ff88' ? 'linear-gradient(90deg, #ff3355 0%, #00ff88 65%, #00ff88 100%)' : undefined,
+        backgroundColor: color === '#00ff88' ? undefined : color,
+      }}
+      className="fixed top-0 left-0 right-0 h-[2.5px] z-50 pointer-events-none shadow-[0_0_12px_rgba(255,51,85,0.5)]"
     />
   );
 };
@@ -182,7 +187,7 @@ export const FloatingBackgroundGlows: React.FC = () => {
           y: prefersReduced ? 0 : y2,
           x: prefersReduced ? 0 : smoothX2,
         }}
-        className="absolute top-1/2 -right-32 h-[620px] w-[620px] rounded-full bg-[#0055ff]/7 blur-[160px]"
+        className="absolute top-1/2 -right-32 h-[620px] w-[620px] rounded-full bg-[#ff3355]/7 blur-[160px]"
       />
       <motion.div
         style={{
@@ -190,7 +195,7 @@ export const FloatingBackgroundGlows: React.FC = () => {
           x: prefersReduced ? 0 : smoothY1,
           translateY: prefersReduced ? 0 : smoothY2,
         }}
-        className="absolute bottom-1/4 left-10 h-[460px] w-[460px] rounded-full bg-[#ff3355]/5 blur-[130px]"
+        className="absolute bottom-1/4 left-10 h-[460px] w-[460px] rounded-full bg-[#ff3355]/8 blur-[130px]"
       />
     </div>
   );

@@ -93,6 +93,7 @@ export interface StandingItem {
   rank: number;
   team: string;
   logo?: string;
+  group?: string;
   played: number;
   won: number;
   drawn: number;
@@ -113,12 +114,14 @@ export interface TournamentFixture {
 
 export interface Tournament {
   id: string;
+  espnSlug?: string;
   name: string;
   shortName: string;
   confederation: 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'AFC' | 'CAF' | 'FIFA';
   region: string;
   country: string;
   flag: string;
+  logoUrl?: string;
   tier: 'Club' | 'International';
   format?: string;
   teamsCount?: number;
@@ -127,6 +130,10 @@ export interface Tournament {
   officialBall?: string;
   broadcastPartners?: string[];
   defendingChampion: string;
+  leader?: string;
+  leaderPoints?: number;
+  activeFixturesCount?: number;
+  liveFixturesCount?: number;
   currentSeason: string;
   currentPhase: string;
   broadcastPass?: string;

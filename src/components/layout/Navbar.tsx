@@ -328,7 +328,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {[
                     'English (Global / Drury)',
                     'Spanish (Latin / Palomo)',
-                    'German (DE / DAZN)',
+                    'German (DE / Live)',
                     'French (Canal+ Sport)',
                     'Arabic (MENA / Chaouali)',
                     'Stadium Ambience (No Voice)',
@@ -359,20 +359,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Match Alerts"
           >
             <Bell className="h-4 w-4" />
-            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#00ff88]" />
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#ff3355]" />
           </motion.button>
 
           {/* VIP Pass Badge & Avatar */}
           <div className="flex items-center gap-2.5 pl-2 border-l border-[#1f2433]">
             <div className="hidden xl:flex flex-col items-end">
               <span className="text-xs font-bold text-white flex items-center gap-1">
-                DAZN PASS <Sparkles className="h-3 w-3 text-[#00ff88]" />
+                PRO PASS <Sparkles className="h-3 w-3 text-[#ff3355]" />
               </span>
               <span className="text-[10px] text-[#00ff88] font-mono">4K ULTRA HDR</span>
             </div>
             <motion.div
               whileHover={{ scale: 1.08, rotate: 3 }}
-              className="h-8 w-8 rounded-lg bg-gradient-to-tr from-[#00ff88] to-[#00b3ff] p-[1.5px] cursor-pointer"
+              className="h-8 w-8 rounded-lg bg-gradient-to-tr from-[#ff3355] via-[#00ff88] to-[#00b3ff] p-[1.5px] cursor-pointer"
             >
               <div className="h-full w-full rounded-[6px] bg-[#0d0e12] flex items-center justify-center font-bold text-xs text-[#00ff88]">
                 FL
@@ -381,6 +381,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
       </div>
+      <div className="h-[1.5px] w-full bg-gradient-to-r from-[#ff3355]/50 via-[#00ff88]/30 to-transparent" />
     </header>
   );
 };

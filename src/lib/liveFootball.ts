@@ -1,49 +1,28 @@
 import { Match, MatchEvent, MatchLineup, MatchOdds, MatchTeam, PlayerInfo } from '../types/football';
+import { GLOBAL_LEAGUES, LEAGUE_BY_SLUG } from './leagues';
 
 const LEAGUE_MAP: Record<string, string> = {
-  '2026-27-english-premier-league': 'Premier League',
-  'english-premier-league': 'Premier League',
-  'eng.1': 'Premier League',
+  '2026-27-english-premier-league': 'English Premier League',
+  'english-premier-league': 'English Premier League',
   'uefa-champions-league': 'UEFA Champions League',
-  'uefa.champions': 'UEFA Champions League',
-  'league-phase': 'UEFA Champions League / Europe',
-  'uefa.europa': 'UEFA Europa League',
-  '2026-27-laliga': 'La Liga EA Sports',
-  'laliga': 'La Liga EA Sports',
-  'esp.1': 'La Liga EA Sports',
-  '2026-27-italian-serie-a': 'Serie A Made in Italy',
-  'italian-serie-a': 'Serie A Made in Italy',
-  'ita.1': 'Serie A Made in Italy',
-  '2026-27-german-bundesliga': 'Bundesliga',
-  'german-bundesliga': 'Bundesliga',
-  'ger.1': 'Bundesliga',
-  '2026-27-ligue-1': 'Ligue 1 McDonald’s',
-  'fra.1': 'Ligue 1 McDonald’s',
-  'torneo-apertura': 'Liga MX',
-  'mex.1': 'Liga MX',
-  'major-league-soccer': 'Major League Soccer',
-  'usa.1': 'Major League Soccer',
-  'saudi-pro-league': 'Roshn Saudi League',
-  'sau.1': 'Roshn Saudi League',
-  'conmebol-libertadores': 'CONMEBOL Copa Libertadores',
-  'conmebol.libertadores': 'CONMEBOL Copa Libertadores',
-  'fifa.world': 'FIFA World Cup',
+  'league-phase': 'UEFA European Competition',
+  '2026-27-laliga': 'Spanish LALIGA',
+  'laliga': 'Spanish LALIGA',
+  '2026-27-italian-serie-a': 'Italian Serie A',
+  'italian-serie-a': 'Italian Serie A',
+  '2026-27-german-bundesliga': 'German Bundesliga',
+  'german-bundesliga': 'German Bundesliga',
+  '2026-27-ligue-1': 'French Ligue 1',
+  'torneo-apertura': 'Mexican Liga BBVA MX',
+  'major-league-soccer': 'MLS',
+  'saudi-pro-league': 'Saudi Pro League',
+  'conmebol-libertadores': 'CONMEBOL Libertadores',
 };
 
-const SCOREBOARD_LEAGUES = [
+const SCOREBOARD_LEAGUES: string[] = [
   'all',
-  'eng.1',
-  'uefa.champions',
-  'uefa.europa',
-  'esp.1',
-  'ita.1',
-  'ger.1',
-  'fra.1',
-  'usa.1',
-  'mex.1',
-  'sau.1',
-  'conmebol.libertadores',
-] as const;
+  ...GLOBAL_LEAGUES.map((l) => l.espnSlug),
+];
 
 interface EspnStatItem {
   name?: string;
@@ -250,7 +229,8 @@ function extractEvents(
 function transformEspnEvent(
   event: EspnEvent,
   leagueSlug: string,
-  summary: EspnSummaryResponse | null
+  summary: EspnSummaryResponse | null,
+  scoreboardLeagueName?: string
 ): Match | null {
   try {
     const competition = event.competitions?.[0];
@@ -301,7 +281,8 @@ function transformEspnEvent(
 
     const seasonSlug = event.season?.slug || '';
     const tournamentName =
-      LEAGUE_MAP[leagueSlug] ||
+      scoreboardLeagueName ||
+      LEAGUE_BY_SLUG[leagueSlug]?.fallbackName ||
       LEAGUE_MAP[seasonSlug] ||
       event.league?.name ||
       competition.notes?.[0]?.headline ||
@@ -483,14 +464,21 @@ export async function fetchLiveMatchesServer(): Promise<Match[]> {
           'User-Agent': 'Mozilla/5.0 FOOTYLive/3.0',
         },
       });
-      if (!res.ok) return { slug, events: [] as EspnEvent[] };
-      const json = (await res.json()) as { events?: EspnEvent[] };
-      return { slug, events: json.events || [] };
+      if (!res.ok) return { slug, leagueName: undefined as string | undefined, events: [] as EspnEvent[] };
+      const json = (await res.json()) as {
+        leagues?: Array<{ name?: string }>;
+        events?: EspnEvent[];
+      };
+      return {
+        slug,
+        leagueName: json.leagues?.[0]?.name,
+        events: json.events || [],
+      };
     })
   );
 
   const seenIds = new Set<string>();
-  const collected: Array<{ event: EspnEvent; slug: string }> = [];
+  const collected: Array<{ event: EspnEvent; slug: string; leagueName?: string }> = [];
 
   for (const res of results) {
     if (res.status !== 'fulfilled') continue;
@@ -498,7 +486,9 @@ export async function fetchLiveMatchesServer(): Promise<Match[]> {
       if (!ev?.id || seenIds.has(ev.id)) continue;
       seenIds.add(ev.id);
       const effectiveSlug = res.value.slug === 'all' ? ev.league?.slug || 'all' : res.value.slug;
-      collected.push({ event: ev, slug: effectiveSlug });
+      const effectiveName =
+        res.value.slug === 'all' ? ev.league?.name : res.value.leagueName || ev.league?.name;
+      collected.push({ event: ev, slug: effectiveSlug, leagueName: effectiveName });
     }
   }
 
@@ -519,8 +509,8 @@ export async function fetchLiveMatchesServer(): Promise<Match[]> {
   );
 
   const matches: Match[] = [];
-  for (const { event, slug } of collected) {
-    const transformed = transformEspnEvent(event, slug, summaryMap.get(event.id) ?? null);
+  for (const { event, slug, leagueName } of collected) {
+    const transformed = transformEspnEvent(event, slug, summaryMap.get(event.id) ?? null, leagueName);
     if (transformed) matches.push(transformed);
   }
 

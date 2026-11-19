@@ -764,12 +764,12 @@ export default function WorldCup2026LandingPage() {
         </section>
         </ParallaxItem>
 
-        {/* SECTION 6: SWITCH BACK TO FOOTYLIVE DAZN DARK ARENA */}
+        {/* SECTION 6: SWITCH BACK TO FOOTYLIVE DARK ARENA */}
         <ParallaxItem speed={18} scaleOnScroll>
-        <section className="rounded-3xl border border-blue-200 bg-gradient-to-r from-blue-600 to-[#0055FF] p-8 sm:p-12 text-white shadow-2xl relative overflow-hidden">
+        <section className="rounded-3xl border border-blue-200 border-t-4 border-t-[#ff3355] bg-gradient-to-r from-blue-600 to-[#0055FF] p-8 sm:p-12 text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10 max-w-2xl space-y-4">
-            <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black uppercase tracking-wider backdrop-blur-md">
-              DAZN STREAMING ENGINE
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ff3355]/90 px-3 py-1 text-xs font-black uppercase tracking-wider text-white shadow-md">
+              FOOTYLIVE 4K STREAMING ENGINE
             </span>
             <h2 className="text-2xl sm:text-4xl font-black uppercase tracking-tight">
               EXPERIENCE FOOTYLIVE 4K STREAM ARENA

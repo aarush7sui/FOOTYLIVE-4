@@ -148,7 +148,12 @@ export async function GET(request: NextRequest) {
     const leagueSlugMap: Record<string, string> = {
       ucl: 'uefa.champions',
       europa: 'uefa.europa',
+      conference: 'uefa.europa.conf',
       libertadores: 'conmebol.libertadores',
+      sudamericana: 'conmebol.sudamericana',
+      afc: 'afc.champions',
+      concacaf: 'concacaf.champions',
+      facup: 'eng.fa',
     };
 
     const slug = leagueSlugMap[tournament];

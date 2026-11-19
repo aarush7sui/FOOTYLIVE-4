@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const LEAGUE_STANDINGS_MAP: Record<string, string> = {
-  'premier-league': 'eng.1',
-  'uefa-champions-league': 'uefa.champions',
-  'la-liga': 'esp.1',
-  'serie-a': 'ita.1',
-  'bundesliga': 'ger.1',
-  'ligue-1': 'fra.1',
-  'mls': 'usa.1',
-  'liga-mx': 'mex.1',
-  'saudi-pro-league': 'sau.1',
-  'copa-libertadores': 'conmebol.libertadores',
-  'fifa-world-cup-2026': 'fifa.world',
-};
+import { LEAGUE_BY_ID, LEAGUE_BY_SLUG } from '../../../lib/leagues';
 
 interface EspnStat {
   name?: string;
@@ -25,6 +12,13 @@ interface EspnStandingEntry {
     logos?: Array<{ href?: string }>;
   };
   stats?: EspnStat[];
+}
+
+interface EspnStandingGroup {
+  name?: string;
+  standings?: {
+    entries?: EspnStandingEntry[];
+  };
 }
 
 interface EspnScoreboardEvent {
@@ -51,22 +45,44 @@ interface EspnScoreboardEvent {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const leagueId = searchParams.get('league') || 'premier-league';
-  const espnLeague = LEAGUE_STANDINGS_MAP[leagueId] || 'eng.1';
+  const explicitSlug = searchParams.get('slug') || '';
+
+  const resolvedSlug =
+    explicitSlug ||
+    LEAGUE_BY_ID[leagueId]?.espnSlug ||
+    LEAGUE_BY_SLUG[leagueId]?.espnSlug;
+
+  if (!resolvedSlug) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Unknown league identifier "${leagueId}". Pass a valid league id or ESPN slug.`,
+        standings: [],
+        fixtures: [],
+        scorers: [],
+        attackingClubs: [],
+      },
+      { status: 404 }
+    );
+  }
 
   try {
     const [standingsRes, scoreboardRes] = await Promise.all([
-      fetch(`https://site.api.espn.com/apis/v2/sports/soccer/${espnLeague}/standings`, {
+      fetch(`https://site.api.espn.com/apis/v2/sports/soccer/${resolvedSlug}/standings`, {
         next: { revalidate: 120 },
+        headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 FOOTYLive/3.0' },
       }),
-      fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${espnLeague}/scoreboard`, {
+      fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${resolvedSlug}/scoreboard`, {
         next: { revalidate: 60 },
+        headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 FOOTYLive/3.0' },
       }).catch(() => null),
     ]);
 
-    let standings: Array<{
+    const standings: Array<{
       rank: number;
       team: string;
       logo: string;
+      group?: string;
       played: number;
       won: number;
       drawn: number;
@@ -81,54 +97,61 @@ export async function GET(request: NextRequest) {
 
     if (standingsRes.ok) {
       const data = await standingsRes.json();
-      const entries: EspnStandingEntry[] =
-        data.children?.[0]?.standings?.entries ||
-        data.standings?.entries ||
-        [];
+      const groups: EspnStandingGroup[] =
+        Array.isArray(data.children) && data.children.length > 0
+          ? data.children
+          : [{ name: undefined, standings: { entries: data.standings?.entries || [] } }];
 
-      standings = entries.map((entry, index) => {
-        const statsMap = (entry.stats || []).reduce<Record<string, EspnStat>>((acc, s) => {
-          if (s.name) acc[s.name] = s;
-          return acc;
-        }, {});
+      const multiGroup = groups.length > 1;
 
-        const played = parseInt(statsMap['gamesPlayed']?.displayValue || '0', 10) || 0;
-        const won = parseInt(statsMap['wins']?.displayValue || '0', 10) || 0;
-        const drawn = parseInt(statsMap['ties']?.displayValue || '0', 10) || 0;
-        const lost = parseInt(statsMap['losses']?.displayValue || '0', 10) || 0;
-        const gf = parseInt(statsMap['pointsFor']?.displayValue || '0', 10) || 0;
-        const ga = parseInt(statsMap['pointsAgainst']?.displayValue || '0', 10) || 0;
-        const gd = parseInt(statsMap['pointDifferential']?.displayValue || '0', 10) || 0;
-        const points = parseInt(statsMap['points']?.displayValue || '0', 10) || 0;
-        const teamName = entry.team?.displayName || `Club ${index + 1}`;
-        const streak = statsMap['streak']?.displayValue || '';
+      for (const grp of groups) {
+        const entries = grp.standings?.entries || [];
+        entries.forEach((entry, index) => {
+          const statsMap = (entry.stats || []).reduce<Record<string, EspnStat>>((acc, s) => {
+            if (s.name) acc[s.name] = s;
+            return acc;
+          }, {});
 
-        let formArray: ('W' | 'D' | 'L')[] = [];
-        const rawForm = statsMap['form']?.displayValue || '';
-        if (rawForm) {
-          formArray = rawForm
-            .toUpperCase()
-            .replace(/[^WDL]/g, '')
-            .slice(-5)
-            .split('') as ('W' | 'D' | 'L')[];
-        }
+          const rankVal = parseInt(statsMap['rank']?.displayValue || '', 10);
+          const played = parseInt(statsMap['gamesPlayed']?.displayValue || '0', 10) || 0;
+          const won = parseInt(statsMap['wins']?.displayValue || '0', 10) || 0;
+          const drawn = parseInt(statsMap['ties']?.displayValue || '0', 10) || 0;
+          const lost = parseInt(statsMap['losses']?.displayValue || '0', 10) || 0;
+          const gf = parseInt(statsMap['pointsFor']?.displayValue || '0', 10) || 0;
+          const ga = parseInt(statsMap['pointsAgainst']?.displayValue || '0', 10) || 0;
+          const gd = parseInt(statsMap['pointDifferential']?.displayValue || '0', 10) || 0;
+          const points = parseInt(statsMap['points']?.displayValue || '0', 10) || 0;
+          const teamName = entry.team?.displayName || `Club ${index + 1}`;
+          const streak = statsMap['streak']?.displayValue || '';
 
-        return {
-          rank: index + 1,
-          team: teamName,
-          logo: entry.team?.logos?.[0]?.href || '',
-          played,
-          won,
-          drawn,
-          lost,
-          gf,
-          ga,
-          gd,
-          points,
-          streak,
-          form: formArray,
-        };
-      });
+          let formArray: ('W' | 'D' | 'L')[] = [];
+          const rawForm = statsMap['form']?.displayValue || '';
+          if (rawForm) {
+            formArray = rawForm
+              .toUpperCase()
+              .replace(/[^WDL]/g, '')
+              .slice(-5)
+              .split('') as ('W' | 'D' | 'L')[];
+          }
+
+          standings.push({
+            rank: !isNaN(rankVal) && rankVal > 0 ? rankVal : index + 1,
+            team: teamName,
+            logo: entry.team?.logos?.[0]?.href || '',
+            group: multiGroup ? grp.name : undefined,
+            played,
+            won,
+            drawn,
+            lost,
+            gf,
+            ga,
+            gd,
+            points,
+            streak,
+            form: formArray,
+          });
+        });
+      }
     }
 
     const fixtures: Array<{
@@ -205,11 +228,10 @@ export async function GET(request: NextRequest) {
 
     const matchScorers = Array.from(matchScorerMap.values()).sort((a, b) => b.goals - a.goals);
 
-    // Top attacking clubs from real ESPN standings sorted by goals for (gf)
     const attackingClubs = [...standings]
       .filter((s) => s.played > 0)
       .sort((a, b) => b.gf - a.gf || b.gd - a.gd)
-      .slice(0, 8)
+      .slice(0, 10)
       .map((s, idx) => ({
         rank: idx + 1,
         team: s.team,
@@ -225,7 +247,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `No live ESPN standings or fixtures available for ${leagueId} right now.`,
+          error: `No live ESPN standings or fixtures currently published for ${leagueId} (${resolvedSlug}).`,
           standings: [],
           fixtures: [],
           scorers: [],
@@ -238,6 +260,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       league: leagueId,
+      espnSlug: resolvedSlug,
       standings,
       fixtures,
       scorers: matchScorers,

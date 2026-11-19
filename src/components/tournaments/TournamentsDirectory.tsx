@@ -30,14 +30,17 @@ export const TournamentsDirectory: React.FC<TournamentsDirectoryProps> = ({
   const [selectedConfed, setSelectedConfed] = useState('ALL');
   const [selectedTier, setSelectedTier] = useState<'ALL' | 'Club' | 'International'>('ALL');
 
+  const countByConfed = (id: string) =>
+    id === 'ALL' ? tournaments.length : tournaments.filter((t) => t.confederation === id).length;
+
   const confederations = [
-    { id: 'ALL', label: 'All Continents', flag: '🌍' },
-    { id: 'UEFA', label: 'UEFA (Europe)', flag: '🇪🇺' },
-    { id: 'CONMEBOL', label: 'CONMEBOL (S. America)', flag: '🌎' },
-    { id: 'FIFA', label: 'FIFA / International', flag: '🌐' },
-    { id: 'CONCACAF', label: 'CONCACAF (N. America)', flag: '🇺🇸' },
-    { id: 'AFC', label: 'AFC (Asia & Middle East)', flag: '🌏' },
-    { id: 'CAF', label: 'CAF (Africa)', flag: '🌍' },
+    { id: 'ALL', label: `All Continents (${countByConfed('ALL')})`, flag: '🌍' },
+    { id: 'UEFA', label: `UEFA (${countByConfed('UEFA')})`, flag: '🇪🇺' },
+    { id: 'CONMEBOL', label: `CONMEBOL (${countByConfed('CONMEBOL')})`, flag: '🌎' },
+    { id: 'FIFA', label: `FIFA (${countByConfed('FIFA')})`, flag: '🌐' },
+    { id: 'CONCACAF', label: `CONCACAF (${countByConfed('CONCACAF')})`, flag: '🇺🇸' },
+    { id: 'AFC', label: `AFC (${countByConfed('AFC')})`, flag: '🌏' },
+    { id: 'CAF', label: `CAF (${countByConfed('CAF')})`, flag: '🌍' },
   ];
 
   const filteredTournaments = tournaments.filter((t) => {
@@ -192,16 +195,36 @@ export const TournamentsDirectory: React.FC<TournamentsDirectoryProps> = ({
               >
                 <div className="h-full flex flex-col justify-between">
                   <div>
-                    {/* Card Header: Flag & Confederation Badge */}
+                    {/* Card Header: Logo/Flag & Confederation Badge */}
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="flex items-center gap-3">
-                        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1a2030] text-2xl border border-[#273046] group-hover:border-[#00ff88]/40 transition-colors">
-                          {tournament.flag}
+                        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1a2030] text-2xl border border-[#273046] group-hover:border-[#00ff88]/40 transition-colors overflow-hidden p-1.5">
+                          {tournament.logoUrl ? (
+                            <img
+                              src={tournament.logoUrl}
+                              alt={tournament.name}
+                              className="h-full w-full object-contain"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            tournament.flag
+                          )}
                         </span>
                         <div>
-                          <span className="rounded bg-[#1a2030] px-2 py-0.5 text-[10px] font-mono font-bold text-[#00ff88]">
-                            {tournament.confederation}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded bg-[#1a2030] px-2 py-0.5 text-[10px] font-mono font-bold text-[#00ff88]">
+                              {tournament.confederation}
+                            </span>
+                            {(tournament.liveFixturesCount || 0) > 0 ? (
+                              <span className="rounded bg-[#ff3355]/20 border border-[#ff3355]/40 px-1.5 py-0.5 text-[9px] font-black text-[#ff3355] font-mono animate-pulse">
+                                ● {tournament.liveFixturesCount} LIVE
+                              </span>
+                            ) : (tournament.activeFixturesCount || 0) > 0 ? (
+                              <span className="rounded bg-[#00ff88]/10 border border-[#00ff88]/30 px-1.5 py-0.5 text-[9px] font-bold text-[#00ff88] font-mono">
+                                {tournament.activeFixturesCount} FIXTURES
+                              </span>
+                            ) : null}
+                          </div>
                           <h3 className="text-base font-black text-white group-hover:text-[#00ff88] transition-colors leading-tight mt-1">
                             {tournament.name}
                           </h3>
@@ -218,21 +241,25 @@ export const TournamentsDirectory: React.FC<TournamentsDirectoryProps> = ({
 
                     {/* Tournament Meta Info */}
                     <div className="rounded-xl bg-[#0c0e14] border border-[#1b202d] p-3 space-y-1.5 text-xs">
-                      <div className="flex justify-between">
+                      <div className="flex justify-between gap-2">
                         <span className="text-[#8b94a5]">Region:</span>
-                        <span className="text-white font-medium">{tournament.region}</span>
+                        <span className="text-white font-medium truncate">{tournament.region}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#8b94a5]">Defending Champion:</span>
-                        <span className="text-[#00ff88] font-bold">🏆 {tournament.defendingChampion}</span>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#8b94a5]">
+                          {tournament.leader ? 'Table Leader:' : 'Title Holder:'}
+                        </span>
+                        <span className="text-[#00ff88] font-bold truncate">🏆 {tournament.defendingChampion}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#8b94a5]">Current Status:</span>
-                        <span className="text-white font-medium">{tournament.currentPhase}</span>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#8b94a5]">Live Status:</span>
+                        <span className="text-white font-medium truncate">{tournament.currentPhase}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between gap-2">
                         <span className="text-[#8b94a5]">Clubs / Nations:</span>
-                        <span className="text-white font-mono font-bold">{tournament.teamsCount} Teams</span>
+                        <span className="text-white font-mono font-bold">
+                          {tournament.teamsCount || tournament.totalTeams || 0} Teams
+                        </span>
                       </div>
                     </div>
 
@@ -245,7 +272,7 @@ export const TournamentsDirectory: React.FC<TournamentsDirectoryProps> = ({
                   <div className="mt-4 pt-3 border-t border-[#1a1f2c] flex items-center justify-between">
                     <span className="text-[11px] text-[#00ff88] font-semibold flex items-center gap-1">
                       <ShieldCheck className="h-3.5 w-3.5" />
-                      Live 4K Broadcast
+                      ESPN Live Feed
                     </span>
 
                     <span className="text-xs font-bold text-white group-hover:text-[#00ff88] flex items-center gap-1 transition-colors">

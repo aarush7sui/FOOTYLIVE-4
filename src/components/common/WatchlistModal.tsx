@@ -70,8 +70,8 @@ export const WatchlistModal: React.FC<WatchlistModalProps> = ({
               <div>
                 <h2 className="text-base font-black text-white flex items-center gap-2">
                   MY WATCHLIST & ALERTS
-                  <span className="rounded-full bg-[#00ff88]/20 px-2 py-0.5 text-[10px] font-bold text-[#00ff88] font-mono">
-                    DAZN PRO
+                  <span className="rounded-full bg-[#ff3355]/15 border border-[#ff3355]/35 px-2 py-0.5 text-[10px] font-bold text-[#ff5c77] font-mono">
+                    MATCHDAY PRO
                   </span>
                 </h2>
                 <p className="text-[11px] text-[#8b94a5]">

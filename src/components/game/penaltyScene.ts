@@ -12,10 +12,15 @@ export interface ProceduralAssets {
 export interface GoalkeeperRig {
   root: THREE.Group;
   torsoPivot: THREE.Group;
+  torsoMesh: THREE.Mesh;
   leftArmPivot: THREE.Group;
+  leftGlove: THREE.Mesh;
   rightArmPivot: THREE.Group;
+  rightGlove: THREE.Mesh;
   leftLegPivot: THREE.Group;
+  leftBoot: THREE.Mesh;
   rightLegPivot: THREE.Group;
+  rightBoot: THREE.Mesh;
   headGroup: THREE.Group;
 }
 
@@ -593,10 +598,15 @@ export function buildGoalkeeperRig(
   return {
     root,
     torsoPivot,
+    torsoMesh,
     leftArmPivot,
+    leftGlove,
     rightArmPivot,
+    rightGlove,
     leftLegPivot,
+    leftBoot,
     rightLegPivot,
+    rightBoot,
     headGroup,
   };
 }

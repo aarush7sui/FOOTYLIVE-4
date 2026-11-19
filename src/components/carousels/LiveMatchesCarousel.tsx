@@ -33,15 +33,10 @@ export const LiveMatchesCarousel: React.FC<LiveMatchesCarouselProps> = ({
 
   const liveMatches = matches.filter((m) => m.status === 'LIVE');
 
+  const liveTournaments = Array.from(new Set(liveMatches.map((m) => m.tournament))).slice(0, 8);
   const filterTabs = [
     { id: 'ALL', label: `All Live (${liveMatches.length})` },
-    { id: 'UEFA Champions League', label: 'Champions League' },
-    { id: 'Premier League', label: 'Premier League' },
-    { id: 'La Liga EA Sports', label: 'La Liga' },
-    { id: 'Serie A Made in Italy', label: 'Serie A' },
-    { id: 'Bundesliga', label: 'Bundesliga' },
-    { id: 'Roshn Saudi League', label: 'Saudi Pro League' },
-    { id: 'CONMEBOL Copa Libertadores', label: 'Copa Libertadores' },
+    ...liveTournaments.map((t) => ({ id: t, label: t })),
   ];
 
   const filtered = liveMatches.filter((m) => {
@@ -204,12 +199,14 @@ export const LiveMatchesCarousel: React.FC<LiveMatchesCarouselProps> = ({
                     </div>
                   </div>
 
-                  {/* Match Venue & Stage */}
+                  {/* Match Venue & Telemetry Meta */}
                   <div className="mt-3 flex items-center justify-between text-[11px] text-[#8b94a5]">
                     <span className="truncate max-w-[180px]">📍 {match.stadium}</span>
                     <span className="flex items-center gap-1 font-mono">
                       <Eye className="h-3 w-3 text-[#00ff88]" />
-                      {match.viewers || '1.2M'}
+                      {match.attendance
+                        ? `${match.attendance.toLocaleString()} ATT`
+                        : match.leagueSlug || match.kickoffTime}
                     </span>
                   </div>
                 </div>

@@ -39,6 +39,99 @@ const _camLookTarget = new THREE.Vector3();
 const _camCurrentLook = new THREE.Vector3(0, 1.3, -14);
 const _dummyObj = new THREE.Object3D();
 
+// Zero-GC scratch vectors for swept ball-to-keeper collision math
+const _prevBallPos = new THREE.Vector3();
+const _segD1 = new THREE.Vector3();
+const _segD2 = new THREE.Vector3();
+const _segR = new THREE.Vector3();
+const _candBall = new THREE.Vector3();
+const _candKeeper = new THREE.Vector3();
+const _bestBallHit = new THREE.Vector3();
+const _bestKeeperHit = new THREE.Vector3();
+const _keeperNormal = new THREE.Vector3();
+const _kPelvis = new THREE.Vector3();
+const _kChest = new THREE.Vector3();
+const _kHead = new THREE.Vector3();
+const _kLShoulder = new THREE.Vector3();
+const _kLGlove = new THREE.Vector3();
+const _kRShoulder = new THREE.Vector3();
+const _kRGlove = new THREE.Vector3();
+const _kLHip = new THREE.Vector3();
+const _kLBoot = new THREE.Vector3();
+const _kRHip = new THREE.Vector3();
+const _kRBoot = new THREE.Vector3();
+const _kTorsoBase = new THREE.Vector3();
+
+function closestPtsOnSegments(
+  p1: THREE.Vector3,
+  q1: THREE.Vector3,
+  p2: THREE.Vector3,
+  q2: THREE.Vector3,
+  out1: THREE.Vector3,
+  out2: THREE.Vector3
+): number {
+  _segD1.subVectors(q1, p1);
+  _segD2.subVectors(q2, p2);
+  _segR.subVectors(p1, p2);
+  const a = _segD1.dot(_segD1);
+  const e = _segD2.dot(_segD2);
+  const f = _segD2.dot(_segR);
+
+  let s = 0;
+  let t = 0;
+
+  if (a <= 1e-8 && e <= 1e-8) {
+    out1.copy(p1);
+    out2.copy(p2);
+    return out1.distanceToSquared(out2);
+  }
+  if (a <= 1e-8) {
+    s = 0;
+    t = THREE.MathUtils.clamp(f / e, 0, 1);
+  } else {
+    const c = _segD1.dot(_segR);
+    if (e <= 1e-8) {
+      t = 0;
+      s = THREE.MathUtils.clamp(-c / a, 0, 1);
+    } else {
+      const b = _segD1.dot(_segD2);
+      const denom = a * e - b * b;
+      s = denom !== 0 ? THREE.MathUtils.clamp((b * f - c * e) / denom, 0, 1) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) {
+        t = 0;
+        s = THREE.MathUtils.clamp(-c / a, 0, 1);
+      } else if (t > 1) {
+        t = 1;
+        s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+      }
+    }
+  }
+
+  out1.copy(p1).addScaledVector(_segD1, s);
+  out2.copy(p2).addScaledVector(_segD2, t);
+  return out1.distanceToSquared(out2);
+}
+
+function closestPtOnSegmentToPoint(
+  p1: THREE.Vector3,
+  q1: THREE.Vector3,
+  pt: THREE.Vector3,
+  out1: THREE.Vector3,
+  out2: THREE.Vector3
+): number {
+  _segD1.subVectors(q1, p1);
+  const a = _segD1.dot(_segD1);
+  let s = 0;
+  if (a > 1e-8) {
+    _segR.subVectors(pt, p1);
+    s = THREE.MathUtils.clamp(_segR.dot(_segD1) / a, 0, 1);
+  }
+  out1.copy(p1).addScaledVector(_segD1, s);
+  out2.copy(pt);
+  return out1.distanceToSquared(out2);
+}
+
 const GOAL_Z = -14;
 const PENALTY_SPOT_Z = -3;
 const GOAL_HALF_W = 3.66;
@@ -180,39 +273,42 @@ export const PenaltyArenaGame: React.FC = () => {
     s.shotState = 'flying';
     s.shotEvaluated = false;
 
-    // Speed scales from 18 to 31 m/s
-    const speed = 18 + power * 13;
+    // Flight speed scales 15.5..25.0 m/s (~0.44s..0.71s) so lateral curl is vivid
+    const speed = 15.5 + power * 9.5;
     const dx = s.aimX - s.ballPos.x;
     const dz = GOAL_Z - s.ballPos.z;
     const horizDist = Math.hypot(dx, dz);
     const flightTime = horizDist / speed;
 
-    // Compensate gravity (g = 9.81) + slight power loft
+    // Compensate gravity (g = 9.81) + pronounced Magnus lateral curl acceleration
     const gravity = 9.81;
     const vy = (s.aimY - s.ballPos.y + 0.5 * gravity * flightTime * flightTime) / flightTime;
-    const curveOffset = s.curveDir * (1.55 + power * 0.9);
+    const curveOffset = s.curveDir * (14.5 + power * 9.5);
     const vx = (dx - 0.5 * curveOffset * flightTime * flightTime) / flightTime;
     const vz = dz / flightTime;
 
     s.ballVel.set(vx, vy, vz);
     s.ballCurveAccel = curveOffset;
-    s.ballSpin.set(-14 * power, s.curveDir * 18, 0);
+    s.ballSpin.set(-16 * power, s.curveDir * (26 + power * 18), s.curveDir * 6);
 
-    // Goalkeeper AI decision (difficulty scales per round)
+    // Goalkeeper AI decision (compensate feet target for dive body lean so torso/gloves align with reach)
     const difficulty = Math.min(0.92, 0.45 + (s.round - 1) * 0.11);
     const predictsCorrectly = Math.random() < difficulty;
     const guessSide = predictsCorrectly
       ? Math.sign(s.aimX || (Math.random() > 0.5 ? 1 : -1))
       : -Math.sign(s.aimX || 1);
 
-    const diveReach = 1.65 + Math.random() * 1.35 * difficulty;
+    const wrongWayReach = 1.45 + Math.random() * 1.4 * difficulty;
+    const desiredReachX = predictsCorrectly ? s.aimX * 0.9 : guessSide * wrongWayReach;
+    const diveAngle = THREE.MathUtils.clamp(-desiredReachX * 0.42, -1.15, 1.15);
+    s.keeperTargetDive = diveAngle;
     s.keeperTargetX = THREE.MathUtils.clamp(
-      predictsCorrectly ? s.aimX * 0.88 : guessSide * diveReach,
+      desiredReachX - Math.sin(-diveAngle) * 0.72,
       -GOAL_HALF_W + 0.55,
       GOAL_HALF_W - 0.55
     );
-    s.keeperTargetDive = -Math.sign(s.keeperTargetX) * 1.15;
-    s.keeperJumpY = s.aimY > 1.55 && predictsCorrectly ? 0.55 : 0.15;
+    s.keeperJumpY =
+      s.aimY > 1.55 && predictsCorrectly && Math.abs(desiredReachX) > 0.5 ? 0.5 : 0.12;
     s.keeperReactDelay = Math.max(0.03, 0.16 - s.round * 0.022);
 
     audioRef.current?.playKick(power);
@@ -518,7 +614,45 @@ export const PenaltyArenaGame: React.FC = () => {
     reticleGroup.add(reticleRing, dotMesh);
     reticleGroup.position.set(0, 1.25, GOAL_Z + 0.08);
     scene.add(reticleGroup);
-    assets.disposables.push(ringGeo, ringMat, dotGeo);
+
+    // Pre-allocated Aim Curve Preview Arc & Ball Flight Trail (zero per-frame GC)
+    const arcSegments = 24;
+    const aimArcPositions = new Float32Array((arcSegments + 1) * 3);
+    const aimArcGeo = new THREE.BufferGeometry();
+    aimArcGeo.setAttribute('position', new THREE.BufferAttribute(aimArcPositions, 3));
+    const aimArcMat = new THREE.LineBasicMaterial({
+      color: 0x00ff88,
+      transparent: true,
+      opacity: 0.5,
+    });
+    const aimArcLine = new THREE.Line(aimArcGeo, aimArcMat);
+    aimArcLine.frustumCulled = false;
+    scene.add(aimArcLine);
+
+    const trailMaxPts = 28;
+    const trailPositions = new Float32Array(trailMaxPts * 3);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+    trailGeo.setDrawRange(0, 0);
+    const trailMat = new THREE.LineBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.78,
+    });
+    const trailLine = new THREE.Line(trailGeo, trailMat);
+    trailLine.frustumCulled = false;
+    scene.add(trailLine);
+    let trailCount = 0;
+
+    assets.disposables.push(
+      ringGeo,
+      ringMat,
+      dotGeo,
+      aimArcGeo,
+      aimArcMat,
+      trailGeo,
+      trailMat
+    );
 
     // Celebration 3D Confetti InstancedMesh (60 pooled particles)
     const confettiCount = 60;
@@ -719,14 +853,36 @@ export const PenaltyArenaGame: React.FC = () => {
           }
         }
 
-        // 2. Ball flight physics & collisions
+        // 2. Ball flight physics & exact keeper mesh collision
         if (s.shotState === 'flying' || s.shotState === 'resolving') {
+          _prevBallPos.copy(s.ballPos);
+
           s.ballVel.x += s.ballCurveAccel * dt;
           s.ballVel.y -= 9.81 * dt;
           s.ballPos.addScaledVector(s.ballVel, dt);
 
           ballMesh.rotation.x += s.ballSpin.x * dt;
           ballMesh.rotation.y += s.ballSpin.y * dt;
+          ballMesh.rotation.z += s.ballSpin.z * dt;
+
+          // Record flight trail vertices (zero allocations)
+          if (s.shotState === 'flying') {
+            if (trailCount < trailMaxPts) {
+              const idx = trailCount * 3;
+              trailPositions[idx] = s.ballPos.x;
+              trailPositions[idx + 1] = s.ballPos.y;
+              trailPositions[idx + 2] = s.ballPos.z;
+              trailCount += 1;
+            } else {
+              trailPositions.copyWithin(0, 3);
+              const idx = (trailMaxPts - 1) * 3;
+              trailPositions[idx] = s.ballPos.x;
+              trailPositions[idx + 1] = s.ballPos.y;
+              trailPositions[idx + 2] = s.ballPos.z;
+            }
+            trailGeo.setDrawRange(0, trailCount);
+            (trailGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+          }
 
           // Ground bounce
           if (s.ballPos.y < BALL_RADIUS) {
@@ -736,7 +892,19 @@ export const PenaltyArenaGame: React.FC = () => {
             s.ballVel.z *= 0.85;
           }
 
-          // Goalkeeper reaction delay & dive
+          // Keep ball cleanly inside side/top goal net once a goal is scored
+          if (s.shotEvaluated && s.ballPos.z < GOAL_Z && Math.abs(s.ballPos.x) < GOAL_HALF_W + 0.3) {
+            if (Math.abs(s.ballPos.x) > GOAL_HALF_W - BALL_RADIUS) {
+              s.ballPos.x = Math.sign(s.ballPos.x) * (GOAL_HALF_W - BALL_RADIUS);
+              s.ballVel.x *= -0.25;
+            }
+            if (s.ballPos.y > GOAL_HEIGHT - BALL_RADIUS) {
+              s.ballPos.y = GOAL_HEIGHT - BALL_RADIUS;
+              s.ballVel.y *= -0.25;
+            }
+          }
+
+          // Goalkeeper reaction delay & dive BEFORE world-matrix collision check
           if (s.keeperReactDelay > 0) {
             s.keeperReactDelay -= dt;
           } else {
@@ -755,40 +923,152 @@ export const PenaltyArenaGame: React.FC = () => {
             );
           }
 
-          // Check goal-line plane crossing (z <= GOAL_Z + 0.35)
-          if (!s.shotEvaluated && s.ballPos.z <= GOAL_Z + 0.45) {
-            // Goalkeeper save check (bounding capsule around keeper body + outstretched arms)
-            const keeperReachX = Math.abs(s.ballPos.x - s.keeperX);
-            const keeperReachY = Math.abs(s.ballPos.y - (1.05 + keeper.root.position.y));
-            if (keeperReachX < 0.72 && keeperReachY < 0.88 && s.ballPos.z > GOAL_Z - 0.3) {
-              s.ballVel.z = Math.abs(s.ballVel.z) * 0.35;
-              s.ballVel.x = Math.sign(s.ballPos.x - s.keeperX || 1) * 4.5;
-              s.ballVel.y = 3.2;
+          keeper.root.position.x = s.keeperX;
+          keeper.root.rotation.z = s.keeperDiveAngle;
+          const armRaise =
+            Math.abs(s.keeperDiveAngle) > 0.25 ? 2.4 : 0.45 + Math.sin(elapsed * 4) * 0.12;
+          keeper.leftArmPivot.rotation.z = -armRaise;
+          keeper.rightArmPivot.rotation.z = armRaise;
+          keeper.root.updateMatrixWorld(true);
+
+          // Exact continuous swept segment-to-mesh collision with visible 3D goalkeeper rig
+          if (!s.shotEvaluated && s.ballPos.z <= GOAL_Z + 1.4 && _prevBallPos.z >= GOAL_Z - 0.6) {
+            keeper.torsoPivot.getWorldPosition(_kTorsoBase);
+            keeper.headGroup.getWorldPosition(_kHead);
+            _kPelvis.lerpVectors(_kTorsoBase, _kHead, 0.18);
+            _kChest.lerpVectors(_kTorsoBase, _kHead, 0.74);
+
+            keeper.leftArmPivot.getWorldPosition(_kLShoulder);
+            keeper.leftGlove.getWorldPosition(_kLGlove);
+            keeper.rightArmPivot.getWorldPosition(_kRShoulder);
+            keeper.rightGlove.getWorldPosition(_kRGlove);
+
+            keeper.leftLegPivot.getWorldPosition(_kLHip);
+            keeper.leftBoot.getWorldPosition(_kLBoot);
+            keeper.rightLegPivot.getWorldPosition(_kRHip);
+            keeper.rightBoot.getWorldPosition(_kRBoot);
+
+            let bestPenetration = -Infinity;
+            let bestHitRadius = 0;
+
+            const testCapsule = (
+              a: THREE.Vector3,
+              b: THREE.Vector3,
+              bodyRadius: number
+            ) => {
+              const hitRadius = bodyRadius + BALL_RADIUS;
+              const distSq = closestPtsOnSegments(
+                _prevBallPos,
+                s.ballPos,
+                a,
+                b,
+                _candBall,
+                _candKeeper
+              );
+              if (distSq <= hitRadius * hitRadius) {
+                const pen = hitRadius - Math.sqrt(distSq);
+                if (pen > bestPenetration) {
+                  bestPenetration = pen;
+                  bestHitRadius = hitRadius;
+                  _bestBallHit.copy(_candBall);
+                  _bestKeeperHit.copy(_candKeeper);
+                }
+              }
+            };
+
+            const testSphere = (pt: THREE.Vector3, bodyRadius: number) => {
+              const hitRadius = bodyRadius + BALL_RADIUS;
+              const distSq = closestPtOnSegmentToPoint(
+                _prevBallPos,
+                s.ballPos,
+                pt,
+                _candBall,
+                _candKeeper
+              );
+              if (distSq <= hitRadius * hitRadius) {
+                const pen = hitRadius - Math.sqrt(distSq);
+                if (pen > bestPenetration) {
+                  bestPenetration = pen;
+                  bestHitRadius = hitRadius;
+                  _bestBallHit.copy(_candBall);
+                  _bestKeeperHit.copy(_candKeeper);
+                }
+              }
+            };
+
+            // Tight colliders matching penaltyScene.ts visible geometry dimensions
+            testCapsule(_kPelvis, _kChest, 0.23);
+            testSphere(_kHead, 0.145);
+            testCapsule(_kLShoulder, _kLGlove, 0.068);
+            testSphere(_kLGlove, 0.095);
+            testCapsule(_kRShoulder, _kRGlove, 0.068);
+            testSphere(_kRGlove, 0.095);
+            testCapsule(_kLHip, _kLBoot, 0.085);
+            testCapsule(_kRHip, _kRBoot, 0.085);
+
+            if (bestPenetration >= 0) {
+              _keeperNormal.subVectors(_bestBallHit, _bestKeeperHit);
+              if (_keeperNormal.lengthSq() < 1e-6) {
+                _keeperNormal.set(0, 0.25, 1).normalize();
+              } else {
+                _keeperNormal.normalize();
+              }
+              // Deflect cleanly forward off the actual contact point on the keeper mesh
+              _keeperNormal.z = Math.max(0.45, _keeperNormal.z);
+              _keeperNormal.normalize();
+
+              s.ballPos
+                .copy(_bestKeeperHit)
+                .addScaledVector(_keeperNormal, bestHitRadius + 0.02);
+
+              const deflectSpeed = Math.max(5.5, s.ballVel.length() * 0.42);
+              s.ballVel.set(
+                _keeperNormal.x * deflectSpeed + s.ballVel.x * 0.2,
+                Math.max(2.2, Math.abs(_keeperNormal.y) * deflectSpeed * 0.55 + 1.8),
+                Math.max(3.6, Math.abs(s.ballVel.z) * 0.38)
+              );
+              s.ballCurveAccel = 0;
               recordOutcome('saved', 'SAVED BY THE KEEPER!');
             }
           }
 
-          if (!s.shotEvaluated && s.ballPos.z <= GOAL_Z) {
-            const absX = Math.abs(s.ballPos.x);
-            const y = s.ballPos.y;
+          // Continuous goal-line plane crossing interpolation (z = GOAL_Z)
+          if (!s.shotEvaluated && _prevBallPos.z > GOAL_Z && s.ballPos.z <= GOAL_Z) {
+            const denom = s.ballPos.z - _prevBallPos.z;
+            const alpha = denom !== 0 ? (GOAL_Z - _prevBallPos.z) / denom : 1;
+            const crossX = _prevBallPos.x + (s.ballPos.x - _prevBallPos.x) * alpha;
+            const crossY = _prevBallPos.y + (s.ballPos.y - _prevBallPos.y) * alpha;
+
+            const absX = Math.abs(crossX);
             const hitLeftOrRightPost =
-              Math.abs(absX - GOAL_HALF_W) < 0.22 && y <= GOAL_HEIGHT + 0.18;
+              Math.abs(absX - GOAL_HALF_W) < 0.26 && crossY <= GOAL_HEIGHT + 0.22;
             const hitCrossbar =
-              absX <= GOAL_HALF_W + 0.18 && Math.abs(y - GOAL_HEIGHT) < 0.22;
+              absX <= GOAL_HALF_W + 0.22 && Math.abs(crossY - GOAL_HEIGHT) < 0.26;
 
             if (hitLeftOrRightPost || hitCrossbar) {
-              s.ballVel.z = Math.abs(s.ballVel.z) * 0.45;
-              s.ballVel.y = 3.5;
+              s.ballPos.set(crossX, Math.max(BALL_RADIUS, crossY), GOAL_Z + 0.26);
+              s.ballVel.z = Math.max(4.0, Math.abs(s.ballVel.z) * 0.45);
+              s.ballVel.y = Math.max(2.0, s.ballVel.y * 0.35 + 2.4);
+              s.ballCurveAccel = 0;
               recordOutcome('post', 'OFF THE WOODWORK!');
-            } else if (absX < GOAL_HALF_W - 0.12 && y < GOAL_HEIGHT - 0.1) {
+            } else if (absX < GOAL_HALF_W - 0.08 && crossY < GOAL_HEIGHT - 0.08 && crossY >= 0) {
               recordOutcome('goal', 'GOAL! TOP CLASS FINISH!');
             } else {
               recordOutcome('wide', 'OFF TARGET! WIDE OF THE POST');
             }
           }
 
+          // Fallback safety if shot goes far out of bounds before crossing GOAL_Z
+          if (!s.shotEvaluated && (s.ballPos.z < GOAL_Z - 3.5 || Math.abs(s.ballPos.x) > 10)) {
+            recordOutcome('wide', 'OFF TARGET! WIDE OF THE POST');
+          }
+
           // Net backstop
-          if (s.shotEvaluated && s.ballPos.z < GOAL_Z - 1.95 && Math.abs(s.ballPos.x) < GOAL_HALF_W) {
+          if (
+            s.shotEvaluated &&
+            s.ballPos.z < GOAL_Z - 1.95 &&
+            Math.abs(s.ballPos.x) < GOAL_HALF_W
+          ) {
             s.ballPos.z = GOAL_Z - 1.95;
             s.ballVel.multiplyScalar(0.25);
           }
@@ -802,12 +1082,20 @@ export const PenaltyArenaGame: React.FC = () => {
                 s.round += 1;
                 setRound(s.round);
                 setLastBanner(null);
+                trailCount = 0;
+                trailGeo.setDrawRange(0, 0);
                 resetBallForNextKick();
                 audio.playWhistle();
               }
             }
           }
         } else {
+          // Clear flight trail when ready at the penalty spot
+          if (trailCount > 0) {
+            trailCount = 0;
+            trailGeo.setDrawRange(0, 0);
+          }
+
           // Idle goalkeeper sway before shot
           s.keeperX = THREE.MathUtils.damp(
             s.keeperX,
@@ -817,14 +1105,13 @@ export const PenaltyArenaGame: React.FC = () => {
           );
           s.keeperDiveAngle = THREE.MathUtils.damp(s.keeperDiveAngle, 0, 7, dt);
           keeper.root.position.y = THREE.MathUtils.damp(keeper.root.position.y, 0, 7, dt);
-        }
 
-        // Update Keeper Articulation
-        keeper.root.position.x = s.keeperX;
-        keeper.root.rotation.z = s.keeperDiveAngle;
-        const armRaise = Math.abs(s.keeperDiveAngle) > 0.25 ? 2.4 : 0.45 + Math.sin(elapsed * 4) * 0.12;
-        keeper.leftArmPivot.rotation.z = -armRaise;
-        keeper.rightArmPivot.rotation.z = armRaise;
+          keeper.root.position.x = s.keeperX;
+          keeper.root.rotation.z = s.keeperDiveAngle;
+          const armRaise = 0.45 + Math.sin(elapsed * 4) * 0.12;
+          keeper.leftArmPivot.rotation.z = -armRaise;
+          keeper.rightArmPivot.rotation.z = armRaise;
+        }
 
         // Update Confetti
         if (s.confettiActive) {
@@ -853,10 +1140,42 @@ export const PenaltyArenaGame: React.FC = () => {
       ballShadow.scale.setScalar(0.85 + (1 - heightRatio) * 0.8);
       contactMat.opacity = 0.55 * heightRatio;
 
-      // Sync Aim Reticle
-      reticleGroup.visible = s.phase === 'playing' && s.shotState === 'ready';
-      reticleGroup.position.set(s.aimX, s.aimY, GOAL_Z + 0.08);
-      reticleRing.rotation.z = elapsed * 1.2;
+      // Sync Aim Reticle & Live Predicted Curve Arc
+      const showAim = s.phase === 'playing' && s.shotState === 'ready';
+      reticleGroup.visible = showAim;
+      aimArcLine.visible = showAim;
+      trailLine.visible =
+        s.phase === 'playing' && (s.shotState === 'flying' || s.shotState === 'resolving');
+
+      if (showAim) {
+        reticleGroup.position.set(s.aimX, s.aimY, GOAL_Z + 0.08);
+        reticleRing.rotation.z = elapsed * 1.2;
+
+        const previewPower = s.isCharging ? THREE.MathUtils.clamp(s.chargeVal, 0.25, 1.0) : 0.65;
+        const pSpeed = 15.5 + previewPower * 9.5;
+        const pDx = s.aimX;
+        const pDz = GOAL_Z - PENALTY_SPOT_Z;
+        const pTime = Math.hypot(pDx, pDz) / pSpeed;
+        const pCurveAccel = s.curveDir * (14.5 + previewPower * 9.5);
+        const pVx = (pDx - 0.5 * pCurveAccel * pTime * pTime) / pTime;
+        const pVy = (s.aimY - BALL_RADIUS + 0.5 * 9.81 * pTime * pTime) / pTime;
+        const pVz = pDz / pTime;
+
+        aimArcMat.color.setHex(s.curveDir !== 0 ? 0x38bdf8 : 0x00ff88);
+        aimArcMat.opacity = s.curveDir !== 0 ? 0.72 : 0.38;
+
+        for (let i = 0; i <= arcSegments; i++) {
+          const t = (i / arcSegments) * pTime;
+          const idx = i * 3;
+          aimArcPositions[idx] = pVx * t + 0.5 * pCurveAccel * t * t;
+          aimArcPositions[idx + 1] = Math.max(
+            BALL_RADIUS * 0.5,
+            BALL_RADIUS + pVy * t - 0.5 * 9.81 * t * t
+          );
+          aimArcPositions[idx + 2] = PENALTY_SPOT_Z + pVz * t;
+        }
+        (aimArcGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      }
 
       // Damped Camera Presets + Title Screen Pan + Shake
       if (s.phase === 'title') {

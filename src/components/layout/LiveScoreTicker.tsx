@@ -35,19 +35,16 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({
   const [selectedFilter, setSelectedFilter] = useState('ALL');
   const [isAudioMuted, setIsAudioMuted] = useState(false);
 
+  const activeCompetitions = Array.from(new Set(matches.map((m) => m.tournament))).slice(0, 6);
   const filterOptions = [
-    { id: 'ALL', label: 'All Scores' },
+    { id: 'ALL', label: `All (${matches.length})` },
     { id: 'LIVE', label: '🔴 Live Now' },
-    { id: 'UEFA Champions League', label: 'UCL' },
-    { id: 'Premier League', label: 'EPL' },
-    { id: 'La Liga EA Sports', label: 'La Liga' },
-    { id: 'Serie A Made in Italy', label: 'Serie A' },
-    { id: 'Bundesliga', label: 'Bundesliga' },
+    ...activeCompetitions.map((t) => ({ id: t, label: t.replace(/^English |^Spanish |^Italian |^German |^French /i, '') })),
   ];
 
   const filteredMatches = matches.filter((m) => {
     if (selectedFilter === 'ALL') return true;
-    if (selectedFilter === 'LIVE') return m.status === 'LIVE';
+    if (selectedFilter === 'LIVE') return m.status === 'LIVE' || m.status === 'HT';
     return m.tournament === selectedFilter;
   });
 
