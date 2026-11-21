@@ -240,6 +240,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </Link>
 
+            {/* FC Matchday 3D Match Link */}
+            <Link
+              href="/fc-match"
+              className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs border border-[#ff3355]/40 bg-[#ff3355]/15 text-[#ff7088] hover:bg-[#ff3355] hover:text-white transition-all ${
+                isCollapsed ? 'justify-center' : ''
+              }`}
+              title="Play FC Matchday 3D"
+            >
+              <Gamepad2 className="h-4 w-4 shrink-0" />
+              {!isCollapsed && (
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="font-bold">FC Matchday 3D</span>
+                  <span className="rounded bg-[#ff3355] px-1.5 py-0.2 text-[9px] font-black text-white">
+                    MATCH
+                  </span>
+                </div>
+              )}
+            </Link>
+
             {/* FOOTYBot AI Trigger */}
             {onOpenChat && (
               <button

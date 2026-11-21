@@ -266,6 +266,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>3D Arena</span>
           </Link>
 
+          {/* FC Matchday 3D Link */}
+          <Link
+            href="/fc-match"
+            className="hidden md:flex items-center gap-1.5 rounded-lg border border-[#ff3355]/40 bg-[#ff3355]/10 px-3 py-1.5 text-xs font-bold text-[#ff7088] hover:bg-[#ff3355] hover:text-white transition-all"
+            title="Play FC Matchday 3D"
+          >
+            <Gamepad2 className="h-3.5 w-3.5" />
+            <span>FC Match</span>
+          </Link>
+
           {/* FOOTYBot AI Quick Button */}
           {onOpenChat && (
             <button

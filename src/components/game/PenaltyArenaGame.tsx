@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Camera,
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import {
   StadiumAudioSynth,
   createProceduralAssets,
@@ -23,6 +24,7 @@ import {
   buildGoalkeeperRig,
   buildFloodlightTower,
 } from './penaltyScene';
+import { GoalReplayModal, type GoalReplayData } from './GoalReplayModal';
 
 type GamePhase = 'title' | 'playing' | 'paused' | 'gameover';
 type ShotOutcome = 'goal' | 'saved' | 'post' | 'wide';
@@ -159,6 +161,7 @@ export const PenaltyArenaGame: React.FC = () => {
   const [muted, setMuted] = useState(false);
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const [lastBanner, setLastBanner] = useState<BannerInfo | null>(null);
+  const [goalReplay, setGoalReplay] = useState<GoalReplayData | null>(null);
   const [roundsHistory, setRoundsHistory] = useState<RoundRecord[]>(() =>
     Array.from({ length: 5 }, (_, i) => ({ round: i + 1, outcome: 'pending' }))
   );
@@ -209,12 +212,24 @@ export const PenaltyArenaGame: React.FC = () => {
     // Held keyboard inputs
     keys: {} as Record<string, boolean>,
 
-    // Confetti burst timer
+    // Confetti burst timer & Goal Replay state
     confettiActive: false,
     confettiTimer: 0,
+    replayOpen: false,
+    pendingGoalReplay: null as GoalReplayData | null,
+    replayCaptureDelay: -1,
+    replayTriggerDelay: -1,
   });
 
   const audioRef = useRef<StadiumAudioSynth | null>(null);
+
+  const dismissGoalReplay = useCallback(() => {
+    const s = simRef.current;
+    if (!s.replayOpen) return;
+    s.replayOpen = false;
+    s.resolveTimer = 0;
+    setGoalReplay(null);
+  }, []);
 
   const syncPhase = useCallback((nextPhase: GamePhase) => {
     simRef.current.phase = nextPhase;
@@ -246,11 +261,16 @@ export const PenaltyArenaGame: React.FC = () => {
     s.aimY = 1.25;
     s.curveDir = 0;
     s.confettiActive = false;
+    s.replayOpen = false;
+    s.pendingGoalReplay = null;
+    s.replayCaptureDelay = -1;
+    s.replayTriggerDelay = -1;
     setRound(1);
     setGoalsScored(0);
     setStreak(0);
     setCurveDir(0);
     setLastBanner(null);
+    setGoalReplay(null);
     setRoundsHistory(
       Array.from({ length: 5 }, (_, i) => ({ round: i + 1, outcome: 'pending' }))
     );
@@ -334,6 +354,14 @@ export const PenaltyArenaGame: React.FC = () => {
       const s = simRef.current;
       s.keys[e.code] = true;
 
+      if (s.replayOpen) {
+        if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape') {
+          e.preventDefault();
+          dismissGoalReplay();
+        }
+        return;
+      }
+
       if (e.code === 'KeyH' && s.phase === 'playing') {
         setDockCollapsed((prev) => !prev);
       }
@@ -370,6 +398,8 @@ export const PenaltyArenaGame: React.FC = () => {
       const s = simRef.current;
       s.keys[e.code] = false;
 
+      if (s.replayOpen) return;
+
       if (e.code === 'Space' && s.phase === 'playing' && s.shotState === 'ready' && s.isCharging) {
         launchShot();
       }
@@ -388,7 +418,7 @@ export const PenaltyArenaGame: React.FC = () => {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [launchShot, startNewMatch, syncPhase]);
+  }, [dismissGoalReplay, launchShot, startNewMatch, syncPhase]);
 
   // Main Three.js Mount & Simulation Effect
   useEffect(() => {
@@ -446,6 +476,12 @@ export const PenaltyArenaGame: React.FC = () => {
       240
     );
     camera.position.set(0, 2.35, 3.8);
+    const replayCamera = new THREE.PerspectiveCamera(44, camera.aspect, 0.1, 240);
+
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost);
 
     // 4. Studio/Stadium Lighting Rig (warm key + cool hemisphere fill)
     const hemiLight = new THREE.HemisphereLight(0x88b4ff, 0x183822, 0.72);
@@ -736,7 +772,7 @@ export const PenaltyArenaGame: React.FC = () => {
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
       const s = simRef.current;
-      if (s.phase !== 'playing' || s.shotState !== 'ready') return;
+      if (s.replayOpen || s.phase !== 'playing' || s.shotState !== 'ready') return;
       updateAimFromPointer(e.clientX, e.clientY);
       s.isCharging = true;
       s.chargeVal = 0.1;
@@ -745,6 +781,7 @@ export const PenaltyArenaGame: React.FC = () => {
 
     const onPointerUp = () => {
       const s = simRef.current;
+      if (s.replayOpen) return;
       if (s.phase === 'playing' && s.shotState === 'ready' && s.isCharging) {
         launchShot();
       }
@@ -1368,6 +1405,45 @@ export const PenaltyArenaGame: React.FC = () => {
                 s.keeperDiveAngle
               );
               recordOutcome('goal', { outcome: 'goal', ...goalCommentary });
+
+              const speedMs = 15.5 + s.lastShotPower * 9.5;
+              const sideWord = crossX < 0 ? 'Left' : 'Right';
+              const placementZone =
+                Math.abs(crossX) < 1.35 && crossY >= 0.98 && s.lastShotPower <= 0.48
+                  ? 'Panenka Center'
+                  : Math.abs(crossX) >= 2.05 && crossY >= 1.62
+                  ? `Top-${sideWord} Corner`
+                  : Math.abs(crossX) >= 2.05 && crossY <= 0.9
+                  ? `Bottom-${sideWord} Corner`
+                  : Math.abs(crossX) < 2.05 && crossY >= 1.72
+                  ? 'Roof of Net'
+                  : Math.abs(crossX) >= 2.8
+                  ? `${sideWord} Side Net`
+                  : 'Center Goal';
+
+              s.pendingGoalReplay = {
+                round: s.round,
+                goalsScored: s.goalsScored,
+                streak: s.streak,
+                headline: goalCommentary.headline,
+                detail: goalCommentary.detail,
+                shotSpeedKmh: Math.round(speedMs * 4.55),
+                powerPct: Math.round(s.lastShotPower * 100),
+                curveLabel:
+                  s.lastShotCurve < 0
+                    ? 'Left Curl'
+                    : s.lastShotCurve > 0
+                    ? 'Right Curl'
+                    : 'Straight',
+                placementZone,
+                crossX,
+                crossY,
+                keeperX: s.keeperX,
+                keeperDiveAngle: s.keeperDiveAngle,
+                snapshotUrl: null,
+              };
+              s.replayCaptureDelay = 0.16;
+              s.replayTriggerDelay = 0.52;
             } else {
               const wideCommentary = buildWideCommentary(crossX, crossY);
               recordOutcome('wide', { outcome: 'wide', ...wideCommentary });
@@ -1391,18 +1467,27 @@ export const PenaltyArenaGame: React.FC = () => {
           }
 
           if (s.shotState === 'resolving') {
-            s.resolveTimer -= dt;
-            if (s.resolveTimer <= 0) {
-              if (s.round >= 5) {
-                syncPhase('gameover');
-              } else {
-                s.round += 1;
-                setRound(s.round);
-                setLastBanner(null);
-                trailCount = 0;
-                trailGeo.setDrawRange(0, 0);
-                resetBallForNextKick();
-                audio.playWhistle();
+            if (s.pendingGoalReplay) {
+              s.replayTriggerDelay -= dt;
+              if (s.replayTriggerDelay <= 0) {
+                s.replayOpen = true;
+                setGoalReplay(s.pendingGoalReplay);
+                s.pendingGoalReplay = null;
+              }
+            } else if (!s.replayOpen) {
+              s.resolveTimer -= dt;
+              if (s.resolveTimer <= 0) {
+                if (s.round >= 5) {
+                  syncPhase('gameover');
+                } else {
+                  s.round += 1;
+                  setRound(s.round);
+                  setLastBanner(null);
+                  trailCount = 0;
+                  trailGeo.setDrawRange(0, 0);
+                  resetBallForNextKick();
+                  audio.playWhistle();
+                }
               }
             }
           }
@@ -1524,6 +1609,32 @@ export const PenaltyArenaGame: React.FC = () => {
       }
 
       camera.lookAt(_camCurrentLook);
+
+      if (s.pendingGoalReplay && s.replayCaptureDelay >= 0) {
+        s.replayCaptureDelay -= dt;
+        if (s.replayCaptureDelay <= 0) {
+          s.replayCaptureDelay = -1;
+          const camSide = s.pendingGoalReplay.crossX >= 0 ? -1 : 1;
+          replayCamera.aspect = camera.aspect;
+          replayCamera.updateProjectionMatrix();
+          replayCamera.position.set(camSide * 5.2, 2.35, GOAL_Z + 6.4);
+          replayCamera.lookAt(
+            s.pendingGoalReplay.crossX * 0.35,
+            1.18,
+            GOAL_Z - 0.6
+          );
+          renderer.render(scene, replayCamera);
+          try {
+            s.pendingGoalReplay.snapshotUrl = renderer.domElement.toDataURL(
+              'image/jpeg',
+              0.88
+            );
+          } catch {
+            s.pendingGoalReplay.snapshotUrl = null;
+          }
+        }
+      }
+
       renderer.render(scene, camera);
 
       if (isSoftwareGl) {
@@ -1543,6 +1654,7 @@ export const PenaltyArenaGame: React.FC = () => {
       window.removeEventListener('pointerup', onPointerUp);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
       audio.dispose();
       envTarget.dispose();
       assets.disposables.forEach((d) => d.dispose());
@@ -1612,7 +1724,7 @@ export const PenaltyArenaGame: React.FC = () => {
       )}
 
       {/* Shot Power Meter & Outcome Banner (Playing) */}
-      {phase === 'playing' && (
+      {phase === 'playing' && !goalReplay && (
         <div className="pointer-events-none absolute top-20 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
           {lastBanner && (
             <div
@@ -1661,8 +1773,15 @@ export const PenaltyArenaGame: React.FC = () => {
         </div>
       )}
 
+      {/* GOAL REPLAY MODAL */}
+      <AnimatePresence>
+        {phase === 'playing' && goalReplay && (
+          <GoalReplayModal replay={goalReplay} onContinue={dismissGoalReplay} />
+        )}
+      </AnimatePresence>
+
       {/* COLLAPSIBLE BOTTOM CONTROL DOCK (<= 15% footprint, solid rgba, no backdrop-filter) */}
-      {phase === 'playing' && (
+      {phase === 'playing' && !goalReplay && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center max-w-[94vw]">
           <button
             onClick={() => setDockCollapsed((v) => !v)}
